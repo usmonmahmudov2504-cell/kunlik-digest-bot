@@ -25,12 +25,16 @@ from __future__ import annotations
 import os
 import re
 import html
+import json
 import datetime
 import requests
 import feedparser
 from bs4 import BeautifulSoup
 
-from render_card import render_weather_card, render_currency_card
+from render_card import (
+    render_day_card, render_news_card, render_weather_card,
+    render_currency_overview_card, render_currency_card, render_advice_card,
+)
 
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
 # Bo'lmasa -> oddiy shablon ishlatiladi (bepul, hammasi baribir ishlaydi).
@@ -98,21 +102,35 @@ def get_all_weather() -> dict[str, tuple]:
 
 
 # ------------------------------------------------------------------ CBU
-# Qo'shimcha valyutalar (rasmiy kurs). USD alohida, yuqorida ko'rsatiladi.
+# Umumiy kurslar postida ko'rsatiladigan valyutalar (USD birinchi).
+OVERVIEW_CCY = ["USD", "EUR", "GBP", "RUB", "KZT", "CNY", "JPY", "TRY", "AED", "KRW"]
+# Dollar postidagi "boshqa valyutalar" qatori uchun (caption)
 EXTRA_CCY = ["EUR", "RUB", "GBP", "KZT", "CNY"]
-CCY_NAMES = {"EUR": "Yevro", "RUB": "Rubl", "GBP": "Funt sterling",
-             "KZT": "Tenge", "CNY": "Yuan"}
+CCY_NAMES = {
+    "USD": "AQSH dollari", "EUR": "Yevro", "GBP": "Funt sterling", "RUB": "Rubl",
+    "KZT": "Tenge", "CNY": "Yuan", "JPY": "Yaponiya iyenasi", "TRY": "Turk lirasi",
+    "AED": "BAA dirhami", "KRW": "Koreya voni",
+}
 
 
 def _fmt_sum(rate: float) -> str:
     return f"{rate:,.2f}".replace(",", " ").replace(".", ",")
 
 
-def get_cbu_rates() -> tuple[str, list[dict]]:
-    """CBU'dan barcha valyutalarni bitta so'rovda oladi.
+def _ccy_row(it: dict) -> dict:
+    code = it.get("Ccy")
+    rate = float(it["Rate"])
+    nominal = str(it.get("Nominal", "1")).strip() or "1"
+    unit = f"{nominal} {code}" if nominal != "1" else f"1 {code}"
+    return {"code": code, "name": CCY_NAMES.get(code, code), "unit": unit, "rate": _fmt_sum(rate)}
 
-    Qaytaradi: (USD matni, [boshqa valyutalar ro'yxati]).
-    Har bir element: {"code", "name", "unit", "rate"}.
+
+def get_cbu_rates() -> tuple[str, list[dict], list[dict]]:
+    """CBU'dan valyutalarni bitta so'rovda oladi.
+
+    Qaytaradi: (USD matni, overview_rows, extra_rows).
+      overview_rows -> umumiy kurslar posti (USD + boshqalar)
+      extra_rows    -> dollar posti caption uchun (EUR, RUB, ...)
     """
     url = "https://cbu.uz/uz/arkhiv-kursov-valyut/json/"
     data = requests.get(url, headers=UA, timeout=15).json()
@@ -121,21 +139,9 @@ def get_cbu_rates() -> tuple[str, list[dict]]:
     usd_rate = float(by["USD"]["Rate"]) if "USD" in by else 0.0
     usd_text = f"{_fmt_sum(usd_rate)} so'm"
 
-    extras: list[dict] = []
-    for code in EXTRA_CCY:
-        it = by.get(code)
-        if not it:
-            continue
-        rate = float(it["Rate"])
-        nominal = str(it.get("Nominal", "1")).strip() or "1"
-        unit = f"{nominal} {code}" if nominal != "1" else f"1 {code}"
-        extras.append({
-            "code": code,
-            "name": CCY_NAMES.get(code, code),
-            "unit": unit,
-            "rate": _fmt_sum(rate),
-        })
-    return usd_text, extras
+    overview = [_ccy_row(by[c]) for c in OVERVIEW_CCY if c in by]
+    extras = [_ccy_row(by[c]) for c in EXTRA_CCY if c in by]
+    return usd_text, overview, extras
 
 
 # ------------------------------------------------------------------ BANKLAR
@@ -235,6 +241,111 @@ def get_top_news(limit: int = 4) -> list[str]:
     return headlines[:limit]
 
 
+# Biznes yangiliklari: spot.uz (biznes nashri) + kalit so'z bo'yicha filtr
+BUSINESS_FEEDS = [
+    ("https://www.spot.uz/uz/rss/", True),    # True = butun feed biznes
+    ("https://kun.uz/uz/rss", False),
+    ("https://daryo.uz/rss", False),
+    ("https://www.gazeta.uz/uz/rss/", False),
+]
+BIZ_KW = ["biznes", "iqtisod", "soliq", "valyuta", "eksport", "import", "investitsiya",
+          "bank", "byudjet", "narx", "tarif", "kredit", "savdo", "bozor", "kompaniya",
+          "infl", "foiz", "ishlab chiqar", "tadbirkor", "iqtisodiy", "pul", "aksiya"]
+
+
+def get_business_news(limit: int = 5) -> list[str]:
+    biz, other, seen = [], [], set()
+    for url, all_biz in BUSINESS_FEEDS:
+        try:
+            parsed = feedparser.parse(url)
+        except Exception as e:
+            print(f"Biznes RSS xato ({url}): {e}")
+            continue
+        for e in parsed.entries[:15]:
+            title = (e.get("title") or "").strip()
+            if not title or title in seen:
+                continue
+            seen.add(title)
+            if all_biz or any(k in title.lower() for k in BIZ_KW):
+                biz.append(title)
+            else:
+                other.append(title)
+    result = biz[:limit]
+    if len(result) < limit:                # yetmasa, umumiy bilan to'ldiramiz
+        result += other[: limit - len(result)]
+    return result
+
+
+# ------------------------------------------------------------------ BUGUN (taqvim)
+SEASONS = {12: "Qish", 1: "Qish", 2: "Qish", 3: "Bahor", 4: "Bahor", 5: "Bahor",
+           6: "Yoz", 7: "Yoz", 8: "Yoz", 9: "Kuz", 10: "Kuz", 11: "Kuz"}
+
+# (oy, kun) -> bayram/muhim kun. O'zbekiston + xalqaro kunlar.
+HOLIDAYS = {
+    (1, 1): ["Yangi yil"],
+    (1, 14): ["Vatan himoyachilari kuni"],
+    (2, 14): ["Sevishganlar kuni"],
+    (2, 21): ["Xalqaro ona tili kuni"],
+    (3, 8): ["Xalqaro xotin-qizlar kuni"],
+    (3, 20): ["Yer kuni (xalqaro)"],
+    (3, 21): ["Navro'z bayrami"],
+    (3, 22): ["Jahon suv kuni"],
+    (4, 7): ["Jahon sog'liqni saqlash kuni"],
+    (4, 12): ["Kosmonavtika kuni"],
+    (4, 22): ["Xalqaro Yer kuni"],
+    (5, 1): ["Xalqaro mehnatkashlar kuni"],
+    (5, 9): ["Xotira va qadrlash kuni"],
+    (6, 1): ["Bolalarni himoya qilish kuni"],
+    (6, 5): ["Jahon atrof-muhit kuni"],
+    (6, 21): ["Xalqaro yoga kuni", "Yozgi quyosh turishi"],
+    (7, 1): ["Arxitektura kuni (xalqaro)"],
+    (8, 31): ["Qatag'on qurbonlarini yod etish kuni"],
+    (9, 1): ["Mustaqillik kuni"],
+    (9, 21): ["Xalqaro tinchlik kuni"],
+    (10, 1): ["O'qituvchi va murabbiylar kuni", "Keksalar kuni (xalqaro)"],
+    (10, 5): ["Jahon o'qituvchilar kuni"],
+    (11, 14): ["Diabetga qarshi kurash kuni"],
+    (11, 21): ["Jahon televideniye kuni"],
+    (12, 1): ["OITSga qarshi kurash kuni"],
+    (12, 8): ["O'zbekiston Konstitutsiyasi kuni"],
+    (12, 10): ["Inson huquqlari kuni"],
+    (12, 31): ["Yil yakuni"],
+}
+
+
+def get_day_info(now):
+    leap = now.year % 4 == 0 and (now.year % 100 != 0 or now.year % 400 == 0)
+    total = 366 if leap else 365
+    yday = now.timetuple().tm_yday
+    return {
+        "weekday": UZ_DAYS[now.weekday()],
+        "season": SEASONS[now.month],
+        "day_of_year": yday,
+        "days_left": total - yday,
+        "week_no": now.isocalendar()[1],
+        "holidays": HOLIDAYS.get((now.month, now.day), []),
+    }
+
+
+# ------------------------------------------------------------------ KUN MASLAHATI
+_TIPS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tips.json")
+
+
+def get_daily_tip(now) -> dict:
+    """tips.json'dan har kuni navbat bilan bittasini tanlaydi (takrorlanmas tartib)."""
+    try:
+        with open(_TIPS_PATH, encoding="utf-8") as f:
+            tips = json.load(f)
+    except Exception as e:
+        print("tips.json o'qilmadi:", e)
+        return {"kind": "Maslahat", "text": "Har kuni bir qadam — yilda katta yo'l."}
+    if not tips:
+        return {"kind": "Maslahat", "text": "Har kuni bir qadam — yilda katta yo'l."}
+    # yil + kun bo'yicha aylanma indeks
+    idx = (now.timetuple().tm_yday + (now.year - 2026) * 366) % len(tips)
+    return tips[idx]
+
+
 # ------------------------------------------------------------------ CAPTION
 def _wx_emoji(desc: str) -> str:
     d = desc.lower()
@@ -253,19 +364,91 @@ def _wx_emoji(desc: str) -> str:
     return "\u2600\ufe0f"              # ☀️
 
 
-def weather_caption(date_label, weather, news) -> str:
+def weather_caption(date_label, weather) -> str:
     """Ob-havo posti uchun elegant, emoji bilan caption (barcha viloyatlar)."""
     parts = [f"\U0001F326\ufe0f <b>Ob-havo</b> \u2014 {date_label}", ""]
     for region, (temp, desc) in weather.items():
         parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>  <i>{desc}</i>")
-    if news:
-        parts.append("")
-        parts.append("\U0001F4F0 <b>Kunning yangiliklari</b>")
-        parts += [f"\u2022 {h}" for h in news[:4]]
     parts.append("")
     parts.append("Hammaga xayrli kun! \u2600\ufe0f")
+    return "\n".join(parts)[:1024]
+
+
+def day_caption(date_label, info) -> str:
+    """1-post: Bugun qanaqa kun (A: hisoblangan + bayramlar; B: Claude boyitadi)."""
+    parts = [f"\U0001F4C5 <b>Bugun</b> \u2014 {date_label}", ""]
+    parts.append(f"\U0001F5D3 Hafta kuni: <b>{info['weekday']}</b>")
+    parts.append(f"\U0001F343 Fasl: <b>{info['season']}</b>")
+    parts.append(f"\U0001F522 Yilning <b>{info['day_of_year']}</b>-kuni \u00b7 "
+                 f"oxiriga <b>{info['days_left']}</b> kun \u00b7 {info['week_no']}-hafta")
+    if info["holidays"]:
+        parts.append("")
+        parts.append("\U0001F389 <b>Bugungi sana/bayram</b>")
+        parts += [f"\u2022 {h}" for h in info["holidays"]]
+    parts.append("")
+    parts.append("Xayrli kun tilaymiz!")
     text = "\n".join(parts)
+
+    if client is not None:                 # B rejimi: kalit bo'lsa Claude boyitadi
+        try:
+            hol = ", ".join(info["holidays"]) or "maxsus bayram yo'q"
+            prompt = (
+                f"Bugun {date_label}, {info['weekday']}, {info['season']} fasli. "
+                f"Bayram/sana: {hol}. Telegram 'Bugun qanaqa kun' posti uchun QISQA, "
+                "qiziqarli caption yoz (o'zbekcha, Telegram HTML faqat <b>, 600 belgidan kam). "
+                "Tuzilishi: emoji bilan sarlavha; sana/fasl; agar bayram bo'lsa u haqida 1 jumla "
+                "qiziqarli fakt; oxirida xayrli kun tilagi. Faqat matnni qaytar."
+            )
+            resp = client.messages.create(
+                model="claude-sonnet-4-6", max_tokens=600,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = "".join(b.text for b in resp.content if b.type == "text").strip() or text
+        except Exception as e:
+            print("Claude caption xato (bugun):", e)
     return text[:1024]
+
+
+def business_caption(date_label, headlines) -> str:
+    """2-post: biznes yangiliklari caption."""
+    parts = [f"\U0001F4BC <b>Biznes ma'lumotlari</b> \u2014 {date_label}", ""]
+    if headlines:
+        for i, h in enumerate(headlines[:6], 1):
+            parts.append(f"<b>{i}.</b> {h}")
+    else:
+        parts.append("<i>Bugun biznes yangiligi topilmadi.</i>")
+    parts.append("")
+    parts.append("\U0001F4E2 Batafsil \u2014 manbalarda")
+    return "\n".join(parts)[:1024]
+
+
+def currency_overview_caption(date_label, rows) -> str:
+    """4-post: umumiy valyuta kurslari caption."""
+    flags = {"USD": "\U0001F1FA\U0001F1F8", "EUR": "\U0001F1EA\U0001F1FA",
+             "GBP": "\U0001F1EC\U0001F1E7", "RUB": "\U0001F1F7\U0001F1FA",
+             "KZT": "\U0001F1F0\U0001F1FF", "CNY": "\U0001F1E8\U0001F1F3",
+             "JPY": "\U0001F1EF\U0001F1F5", "TRY": "\U0001F1F9\U0001F1F7",
+             "AED": "\U0001F1E6\U0001F1EA", "KRW": "\U0001F1F0\U0001F1F7"}
+    parts = [f"\U0001F4B6 <b>Valyuta kurslari</b> \u2014 {date_label}", "",
+             "<i>Markaziy bank rasmiy kursi (1 birlik uchun)</i>", ""]
+    for r in rows:
+        parts.append(f"{flags.get(r['code'], '')} <b>{r['code']}</b> "
+                     f"({r['unit']}) \u2014 {r['rate']} so'm")
+    parts.append("")
+    parts.append("\U0001F4B5 Dollarning banklar bo'yicha kursi \u2014 keyingi postda")
+    return "\n".join(parts)[:1024]
+
+
+def advice_caption(date_label, tip) -> str:
+    """6-post: kun maslahati/hikmati caption."""
+    kind = tip.get("kind", "Maslahat")
+    icon = "\U0001F4A1" if kind == "Maslahat" else "\u2728"
+    label = "Kun maslahati" if kind == "Maslahat" else "Kun hikmati"
+    parts = [f"{icon} <b>{label}</b> \u2014 {date_label}", ""]
+    parts.append(f"\u00ab{tip['text']}\u00bb")
+    parts.append("")
+    parts.append("Kuningiz unumli o'tsin! \U0001F4AA")
+    return "\n".join(parts)[:1024]
 
 
 def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
@@ -346,27 +529,51 @@ UZ_MONTHS = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun",
 def main() -> None:
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
     date_label = f"{now.day}-{UZ_MONTHS[now.month]}, {now.year} \u00b7 {UZ_DAYS[now.weekday()]}"
-
-    weather = get_all_weather()
-    cbu_text, extra_rates = get_cbu_rates()
-    banks = get_bank_rates()
-    news = get_top_news()
-
-    print(f"Ob-havo: {len(weather)} viloyat | Banklar: {len(banks)} | "
-          f"Qo'shimcha valyuta: {len(extra_rates)} | Yangilik: {len(news)}")
-
     ch = str(TELEGRAM_CHANNEL)
 
-    # 1-POST: ob-havo
-    w_img = render_weather_card(date_label, weather, "weather.png", ch)
-    post_photo(w_img, weather_caption(date_label, weather, news))
-    print("Ob-havo posti yuborildi.")
+    # Ma'lumotlarni yig'amiz
+    day_info = get_day_info(now)
+    business = get_business_news()
+    weather = get_all_weather()
+    cbu_text, overview, extra_rates = get_cbu_rates()
+    banks = get_bank_rates()
+    tip = get_daily_tip(now)
 
-    # 2-POST: dollar + boshqa valyutalar
-    c_img = render_currency_card(date_label, cbu_text, banks, "currency.png", ch,
-                                 extra_rates=extra_rates)
-    post_photo(c_img, currency_caption(date_label, cbu_text, banks, extra_rates))
-    print("Dollar kursi posti yuborildi.")
+    print(f"Bugun: {len(day_info['holidays'])} bayram | Biznes: {len(business)} | "
+          f"Ob-havo: {len(weather)} viloyat | Valyuta: {len(overview)} | Banklar: {len(banks)}")
+
+    # 1-POST: Bugun qanaqa kun
+    img1 = render_day_card(date_label, day_info["weekday"], day_info["season"],
+                           day_info["day_of_year"], day_info["days_left"],
+                           day_info["week_no"], day_info["holidays"], "p1.png", ch)
+    post_photo(img1, day_caption(date_label, day_info))
+    print("1/6 Bugun posti yuborildi.")
+
+    # 2-POST: Biznes
+    img2 = render_news_card("Biznes", date_label, business, "p2.png", ch,
+                            "Manba: spot.uz, kun.uz, daryo.uz")
+    post_photo(img2, business_caption(date_label, business))
+    print("2/6 Biznes posti yuborildi.")
+
+    # 3-POST: Kun maslahati
+    img3 = render_advice_card(date_label, tip["kind"], tip["text"], "p3.png", ch)
+    post_photo(img3, advice_caption(date_label, tip))
+    print("3/6 Kun maslahati posti yuborildi.")
+
+    # 4-POST: Ob-havo
+    img4 = render_weather_card(date_label, weather, "p4.png", ch)
+    post_photo(img4, weather_caption(date_label, weather))
+    print("4/6 Ob-havo posti yuborildi.")
+
+    # 5-POST: Umumiy kurslar
+    img5 = render_currency_overview_card(date_label, overview, "p5.png", ch)
+    post_photo(img5, currency_overview_caption(date_label, overview))
+    print("5/6 Kurslar posti yuborildi.")
+
+    # 6-POST: Dollar batafsil (banklar)
+    img6 = render_currency_card(date_label, cbu_text, banks, "p6.png", ch)
+    post_photo(img6, currency_caption(date_label, cbu_text, banks))
+    print("6/6 Dollar posti yuborildi.")
 
 
 if __name__ == "__main__":
