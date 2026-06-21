@@ -130,13 +130,20 @@ def render_weather_card(date_label, weather, out_path="weather.png", channel_lab
 
 
 # ============================================================ VALYUTA KARTASI
-def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png", channel_label=""):
+def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png",
+                         channel_label="", extra_rates=None):
+    extra_rates = extra_rates or []
     W = 900
     pad = 40
     row_h = 54
     callout_h = 150
 
-    H = pad + 96 + 40 + 50 + callout_h + 24 + 56 + len(banks) * row_h + 120 + 50
+    extra_h = 0
+    if extra_rates:
+        extra_h = 30 + 44 + len(extra_rates) * 48 + 10
+
+    H = (pad + 96 + 40 + 50 + callout_h + 24 + 56 + len(banks) * row_h
+         + 120 + extra_h + 50)
     img, d = _new(W, H)
 
     _header(d, W, pad, "Dollar kursi", date_label)
@@ -215,6 +222,26 @@ def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png", c
     y += 34
     d.ellipse((pad + 2, y + 6, pad + 18, y + 22), fill=ACCENT)
     d.text((pad + 28, y), "eng arzon sotadi \u2014 dollarni shu yerdan oling", font=f_h_small, fill=MUTED)
+    y += 44
+
+    # ---- Boshqa valyutalar (rasmiy CBU) ----
+    if extra_rates:
+        d.line((pad, y, W - pad, y), fill=DIVIDER, width=2)
+        y += 16
+        d.text((pad + 4, y), "Boshqa valyutalar (rasmiy, CBU)",
+               font=_font("DejaVuSans-Bold.ttf", 24), fill=TEXT)
+        y += 44
+        f_code = _font("DejaVuSans-Bold.ttf", 26)
+        f_name = _font("DejaVuSans.ttf", 23)
+        for e in extra_rates:
+            d.text((pad + 20, y + 6), e["code"], font=f_code, fill=ACCENT)
+            label = f"{e['name']}  ({e['unit']})"
+            d.text((pad + 110, y + 9), label, font=f_name, fill=MUTED)
+            rate_s = f"{e['rate']} so'm"
+            tw = d.textlength(rate_s, font=f_row_b)
+            d.text((W - pad - 20 - tw, y + 7), rate_s, font=f_row_b, fill=TEXT)
+            y += 48
+        y += 6
 
     _footer(d, W, H, pad, channel_label, "Manba: cbu.uz, goldenpages.uz")
     img.save(out_path)
@@ -243,8 +270,16 @@ if __name__ == "__main__":
         {"bank": "Orient Finans", "buy": 12080, "sell": 12140},
         {"bank": "Apex Bank", "buy": 12010, "sell": 12090},
     ]
+    extra = [
+        {"code": "EUR", "name": "Yevro", "unit": "1 EUR", "rate": "13 901,44"},
+        {"code": "RUB", "name": "Rubl", "unit": "1 RUB", "rate": "153,28"},
+        {"code": "GBP", "name": "Funt sterling", "unit": "1 GBP", "rate": "16 240,10"},
+        {"code": "KZT", "name": "Tenge", "unit": "100 KZT", "rate": "2 410,55"},
+        {"code": "CNY", "name": "Yuan", "unit": "1 CNY", "rate": "1 681,90"},
+    ]
     render_weather_card("21-iyun, 2026 \u00b7 Yakshanba", weather,
                         "/home/claude/dist/post-ob-havo.png", "@oq_xabar")
     render_currency_card("21-iyun, 2026 \u00b7 Yakshanba", "12 085,56 so'm", banks,
-                         "/home/claude/dist/post-dollar.png", "@oq_xabar")
+                         "/home/claude/dist/post-dollar.png", "@oq_xabar",
+                         extra_rates=extra)
     print("ikkala karta render qilindi")
