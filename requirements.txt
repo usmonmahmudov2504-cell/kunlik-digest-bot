@@ -1,0 +1,5 @@
+requests
+feedparser
+anthropic
+beautifulsoup4
+Pillow
