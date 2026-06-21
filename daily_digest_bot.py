@@ -510,14 +510,37 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
 # ------------------------------------------------------------------ TELEGRAM
 def post_photo(image_path: str, caption: str) -> None:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
-    with open(image_path, "rb") as f:
-        resp = requests.post(
-            url,
-            data={"chat_id": TELEGRAM_CHANNEL, "caption": caption, "parse_mode": "HTML"},
-            files={"photo": f},
-            timeout=30,
-        )
-    resp.raise_for_status()
+
+    def _send(cap, html=True):
+        data = {"chat_id": TELEGRAM_CHANNEL, "caption": cap}
+        if html:
+            data["parse_mode"] = "HTML"
+        with open(image_path, "rb") as f:
+            return requests.post(url, data=data, files={"photo": f}, timeout=60)
+
+    resp = _send(caption, html=True)
+    if not resp.ok:
+        # Telegram'ning aniq sababini ko'rsatamiz
+        print(f"  Telegram {resp.status_code}: {resp.text}")
+        # Ehtimol HTML caption muammosi -> teglarsiz qayta urinamiz
+        plain = re.sub(r"<[^>]+>", "", caption)
+        resp2 = _send(plain, html=False)
+        if not resp2.ok:
+            print(f"  Qayta urinish ham xato {resp2.status_code}: {resp2.text}")
+            resp2.raise_for_status()
+
+
+def safe_post(render_fn, caption, label):
+    """Bitta post xato bersa, butun ishni to'xtatmaydi."""
+    try:
+        img = render_fn()
+        post_photo(img, caption)
+        print(f"{label} \u2713")
+        return True
+    except Exception as e:
+        print(f"{label} XATO: {e}")
+        return False
+
 
 
 # ------------------------------------------------------------------ MAIN
@@ -542,38 +565,45 @@ def main() -> None:
     print(f"Bugun: {len(day_info['holidays'])} bayram | Biznes: {len(business)} | "
           f"Ob-havo: {len(weather)} viloyat | Valyuta: {len(overview)} | Banklar: {len(banks)}")
 
-    # 1-POST: Bugun qanaqa kun
-    img1 = render_day_card(date_label, day_info["weekday"], day_info["season"],
-                           day_info["day_of_year"], day_info["days_left"],
-                           day_info["week_no"], day_info["holidays"], "p1.png", ch)
-    post_photo(img1, day_caption(date_label, day_info))
-    print("1/6 Bugun posti yuborildi.")
+    results = []
+    # 1-POST: Bugun
+    results.append(safe_post(
+        lambda: render_day_card(date_label, day_info["weekday"], day_info["season"],
+                                day_info["day_of_year"], day_info["days_left"],
+                                day_info["week_no"], day_info["holidays"], "p1.png", ch),
+        day_caption(date_label, day_info), "1/6 Bugun"))
 
     # 2-POST: Biznes
-    img2 = render_news_card("Biznes", date_label, business, "p2.png", ch,
-                            "Manba: spot.uz, kun.uz, daryo.uz")
-    post_photo(img2, business_caption(date_label, business))
-    print("2/6 Biznes posti yuborildi.")
+    results.append(safe_post(
+        lambda: render_news_card("Biznes", date_label, business, "p2.png", ch,
+                                 "Manba: spot.uz, kun.uz, daryo.uz"),
+        business_caption(date_label, business), "2/6 Biznes"))
 
     # 3-POST: Kun maslahati
-    img3 = render_advice_card(date_label, tip["kind"], tip["text"], "p3.png", ch)
-    post_photo(img3, advice_caption(date_label, tip))
-    print("3/6 Kun maslahati posti yuborildi.")
+    results.append(safe_post(
+        lambda: render_advice_card(date_label, tip["kind"], tip["text"], "p3.png", ch),
+        advice_caption(date_label, tip), "3/6 Kun maslahati"))
 
     # 4-POST: Ob-havo
-    img4 = render_weather_card(date_label, weather, "p4.png", ch)
-    post_photo(img4, weather_caption(date_label, weather))
-    print("4/6 Ob-havo posti yuborildi.")
+    results.append(safe_post(
+        lambda: render_weather_card(date_label, weather, "p4.png", ch),
+        weather_caption(date_label, weather), "4/6 Ob-havo"))
 
     # 5-POST: Umumiy kurslar
-    img5 = render_currency_overview_card(date_label, overview, "p5.png", ch)
-    post_photo(img5, currency_overview_caption(date_label, overview))
-    print("5/6 Kurslar posti yuborildi.")
+    results.append(safe_post(
+        lambda: render_currency_overview_card(date_label, overview, "p5.png", ch),
+        currency_overview_caption(date_label, overview), "5/6 Kurslar"))
 
-    # 6-POST: Dollar batafsil (banklar)
-    img6 = render_currency_card(date_label, cbu_text, banks, "p6.png", ch)
-    post_photo(img6, currency_caption(date_label, cbu_text, banks))
-    print("6/6 Dollar posti yuborildi.")
+    # 6-POST: Dollar batafsil
+    results.append(safe_post(
+        lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch),
+        currency_caption(date_label, cbu_text, banks), "6/6 Dollar"))
+
+    ok = sum(results)
+    print(f"\nNatija: {ok}/6 post yuborildi.")
+    if ok < len(results):
+        import sys
+        sys.exit(1)
 
 
 if __name__ == "__main__":
