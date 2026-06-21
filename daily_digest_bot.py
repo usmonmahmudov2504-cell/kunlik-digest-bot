@@ -29,7 +29,7 @@ import requests
 import feedparser
 from bs4 import BeautifulSoup
 
-from render_card import render_card
+from render_card import render_weather_card, render_currency_card
 
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
 # Bo'lmasa -> oddiy shablon ishlatiladi (bepul, hammasi baribir ishlaydi).
@@ -204,65 +204,63 @@ def get_top_news(limit: int = 4) -> list[str]:
 
 
 # ------------------------------------------------------------------ CAPTION
-def _template_caption(date_label, w_line, cbu_rate, rates_hint, news) -> str:
-    """Claude'siz, bepul shablon caption."""
-    parts = [f"\U0001F4C5 <b>Bugungi digest</b> \u2014 {date_label}", ""]
-    if w_line:
-        parts.append(f"\U0001F324 Toshkent: {w_line}")
-    parts.append(f"\U0001F4B5 Markaziy bank: {cbu_rate}")
-    if rates_hint:
-        parts.append(rates_hint)
-    parts.append("")
+def weather_caption(date_label, weather, news) -> str:
+    """Ob-havo posti uchun caption (yangiliklar shu yerda)."""
+    tashkent = weather.get("Toshkent sh.")
+    parts = [f"\U0001F324 <b>Ob-havo</b> \u2014 {date_label}", ""]
+    if tashkent:
+        parts.append(f"Toshkent: <b>{round(tashkent[0])}\u00b0C</b>, {tashkent[1]}")
+        parts.append("")
     if news:
         parts.append("<b>Kunning yangiliklari</b>")
         parts += [f"\u2022 {h}" for h in news]
-    parts.append("")
-    parts.append("Hammaga xayrli va barakali kun! \u2728")
-    return "\n".join(parts)[:1024]
+        parts.append("")
+    parts.append("Hammaga xayrli kun! \u2600")
+
+    text = "\n".join(parts)
+    # Kalit bo'lsa, Claude jonliroq qilib yozadi
+    if client is not None:
+        try:
+            news_list = "\n".join(f"- {h}" for h in news) or "- (yo'q)"
+            prompt = (
+                f"Bugun {date_label}. Telegram ob-havo posti uchun QISQA caption yoz. "
+                f"Toshkent: {round(tashkent[0])}\u00b0C, {tashkent[1]}.\n"
+                f"Yangiliklar:\n{news_list}\n\n"
+                "O'zbek tilida, Telegram HTML (faqat <b>), 600 belgidan kam. Tuzilishi: "
+                "emoji bilan sarlavha; 1 jumla ob-havo haqida; <b>Yangiliklar</b> ostida "
+                "ro'yxat; oxirida xayrli kun tilagi. Faqat matnni qaytar."
+            )
+            resp = client.messages.create(
+                model="claude-sonnet-4-6", max_tokens=600,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = "".join(b.text for b in resp.content if b.type == "text").strip() or text
+        except Exception as e:
+            print("Claude caption xato (ob-havo):", e)
+    return text[:1024]
 
 
-def compose_caption(date_label, weather, cbu_rate, banks, news) -> str:
-    """Rasm ostidagi qisqa matn (caption). Telegram limit: 1024 belgi."""
-    tashkent = weather.get("Toshkent sh.")
-    w_line = f"{round(tashkent[0])}\u00b0C, {tashkent[1]}" if tashkent else ""
+def currency_caption(date_label, cbu_rate, banks) -> str:
+    """Dollar kursi posti uchun caption."""
     best_sell = min((b for b in banks if b.get("sell")), key=lambda b: b["sell"], default=None)
     best_buy = max((b for b in banks if b.get("buy")), key=lambda b: b["buy"], default=None)
-    rates_hint = ""
-    if best_sell and best_buy:
-        rates_hint = (
-            f"\U0001F7E2 Eng arzon olish: {best_sell['bank']} ({best_sell['sell']:,} so'm) \u00b7 "
-            f"\U0001F7E1 eng qimmat sotish: {best_buy['bank']} ({best_buy['buy']:,} so'm)".replace(",", " ")
+    parts = [f"\U0001F4B5 <b>Dollar kursi</b> \u2014 {date_label}", ""]
+    parts.append(f"Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
+    parts.append("")
+    if best_buy and best_sell:
+        parts.append(
+            f"\U0001F7E2 Dollar SOTMOQCHIMISIZ? Eng qimmat oladi: "
+            f"<b>{best_buy['bank']}</b> \u2014 {best_buy['buy']:,} so'm".replace(",", " ")
         )
-
-    # Kalit yo'q bo'lsa -> shablon (bepul)
-    if client is None:
-        return _template_caption(date_label, w_line, cbu_rate, rates_hint, news)
-
-    news_list = "\n".join(f"- {h}" for h in news) or "- (yangilik yo'q)"
-    prompt = (
-        f"Bugun: {date_label}. Quyidagi ma'lumotlar asosida Telegram post uchun QISQA "
-        "caption yoz (rasm allaqachon ob-havo va kurslar jadvalini ko'rsatadi, "
-        "shuning uchun ularni takrorlama).\n\n"
-        f"Toshkent ob-havosi: {w_line}\n"
-        f"Markaziy bank USD kursi: {cbu_rate}\n"
-        f"{rates_hint}\n\n"
-        f"Kunning yangiliklari:\n{news_list}\n\n"
-        "Talablar: o'zbek tilida, Telegram HTML (faqat <b> va <i>), 700 belgidan oshmasin. "
-        "Tuzilishi: 1) bitta jonli sarlavha qatori emoji bilan; 2) 1 jumla ob-havo+kurs "
-        "haqida umumiy xulosa; 3) <b>Yangiliklar</b> ostida 3-4 ta sarlavha ro'yxati; "
-        "4) oxirida 1 jumlalik xayrli kun tilagi. Faqat tayyor matnni qaytar, izoh yozma."
-    )
-    try:
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=700,
-            messages=[{"role": "user", "content": prompt}],
+        parts.append(
+            f"\U0001F535 Dollar OLMOQCHIMISIZ? Eng arzon sotadi: "
+            f"<b>{best_sell['bank']}</b> \u2014 {best_sell['sell']:,} so'm".replace(",", " ")
         )
-        text = "".join(b.text for b in resp.content if b.type == "text").strip()
-        return text[:1024]
-    except Exception as e:
-        print("Claude caption xato, shablonga o'tildi:", e)
-        return _template_caption(date_label, w_line, cbu_rate, rates_hint, news)
+    else:
+        parts.append("<i>Banklar kursi hozircha mavjud emas.</i>")
+    parts.append("")
+    parts.append("To'liq jadval rasmda \u2191")
+    return "\n".join(parts)[:1024]
 
 
 # ------------------------------------------------------------------ TELEGRAM
@@ -295,17 +293,17 @@ def main() -> None:
 
     print(f"Ob-havo: {len(weather)} viloyat | Banklar: {len(banks)} | Yangilik: {len(news)}")
 
-    image = render_card(
-        date_label=date_label,
-        weather=weather,
-        cbu_rate=cbu_text,
-        banks=banks,
-        out_path="digest.png",
-        channel_label=str(TELEGRAM_CHANNEL),
-    )
-    caption = compose_caption(date_label, weather, cbu_text, banks, news)
-    post_photo(image, caption)
-    print("Post yuborildi.\n\n", caption)
+    ch = str(TELEGRAM_CHANNEL)
+
+    # 1-POST: ob-havo
+    w_img = render_weather_card(date_label, weather, "weather.png", ch)
+    post_photo(w_img, weather_caption(date_label, weather, news))
+    print("Ob-havo posti yuborildi.")
+
+    # 2-POST: dollar kursi
+    c_img = render_currency_card(date_label, cbu_text, banks, "currency.png", ch)
+    post_photo(c_img, currency_caption(date_label, cbu_text, banks))
+    print("Dollar kursi posti yuborildi.")
 
 
 if __name__ == "__main__":
