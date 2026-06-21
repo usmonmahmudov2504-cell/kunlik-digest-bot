@@ -97,13 +97,44 @@ def get_all_weather() -> dict[str, tuple]:
 
 
 # ------------------------------------------------------------------ CBU
-def get_cbu_usd() -> tuple[str, float]:
-    """Markaziy bankning rasmiy USD/UZS kursini qaytaradi (matn, son)."""
-    url = "https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/"
+# Qo'shimcha valyutalar (rasmiy kurs). USD alohida, yuqorida ko'rsatiladi.
+EXTRA_CCY = ["EUR", "RUB", "GBP", "KZT", "CNY"]
+CCY_NAMES = {"EUR": "Yevro", "RUB": "Rubl", "GBP": "Funt sterling",
+             "KZT": "Tenge", "CNY": "Yuan"}
+
+
+def _fmt_sum(rate: float) -> str:
+    return f"{rate:,.2f}".replace(",", " ").replace(".", ",")
+
+
+def get_cbu_rates() -> tuple[str, list[dict]]:
+    """CBU'dan barcha valyutalarni bitta so'rovda oladi.
+
+    Qaytaradi: (USD matni, [boshqa valyutalar ro'yxati]).
+    Har bir element: {"code", "name", "unit", "rate"}.
+    """
+    url = "https://cbu.uz/uz/arkhiv-kursov-valyut/json/"
     data = requests.get(url, headers=UA, timeout=15).json()
-    rate = float(data[0]["Rate"])
-    pretty = f"{rate:,.2f}".replace(",", " ").replace(".", ",")
-    return f"{pretty} so'm", rate
+    by = {item.get("Ccy"): item for item in data}
+
+    usd_rate = float(by["USD"]["Rate"]) if "USD" in by else 0.0
+    usd_text = f"{_fmt_sum(usd_rate)} so'm"
+
+    extras: list[dict] = []
+    for code in EXTRA_CCY:
+        it = by.get(code)
+        if not it:
+            continue
+        rate = float(it["Rate"])
+        nominal = str(it.get("Nominal", "1")).strip() or "1"
+        unit = f"{nominal} {code}" if nominal != "1" else f"1 {code}"
+        extras.append({
+            "code": code,
+            "name": CCY_NAMES.get(code, code),
+            "unit": unit,
+            "rate": _fmt_sum(rate),
+        })
+    return usd_text, extras
 
 
 # ------------------------------------------------------------------ BANKLAR
@@ -204,63 +235,88 @@ def get_top_news(limit: int = 4) -> list[str]:
 
 
 # ------------------------------------------------------------------ CAPTION
-def weather_caption(date_label, weather, news) -> str:
-    """Ob-havo posti uchun caption (yangiliklar shu yerda)."""
-    tashkent = weather.get("Toshkent sh.")
-    parts = [f"\U0001F324 <b>Ob-havo</b> \u2014 {date_label}", ""]
-    if tashkent:
-        parts.append(f"Toshkent: <b>{round(tashkent[0])}\u00b0C</b>, {tashkent[1]}")
-        parts.append("")
-    if news:
-        parts.append("<b>Kunning yangiliklari</b>")
-        parts += [f"\u2022 {h}" for h in news]
-        parts.append("")
-    parts.append("Hammaga xayrli kun! \u2600")
+def _wx_emoji(desc: str) -> str:
+    d = desc.lower()
+    if "qor" in d:
+        return "\u2744\ufe0f"          # ❄️
+    if "yomg'ir" in d or "jala" in d:
+        return "\U0001F327"            # 🌧
+    if "momaqaldiroq" in d:
+        return "\u26C8\ufe0f"          # ⛈
+    if "tuman" in d:
+        return "\U0001F32B\ufe0f"      # 🌫
+    if "qisman bulut" in d:
+        return "\U0001F324\ufe0f"      # 🌤
+    if "bulut" in d:
+        return "\u2601\ufe0f"          # ☁️
+    return "\u2600\ufe0f"              # ☀️
 
+
+def weather_caption(date_label, weather, news) -> str:
+    """Ob-havo posti uchun elegant, emoji bilan caption (barcha viloyatlar)."""
+    parts = [f"\U0001F326\ufe0f <b>Ob-havo</b> \u2014 {date_label}", ""]
+    for region, (temp, desc) in weather.items():
+        parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>  <i>{desc}</i>")
+    if news:
+        parts.append("")
+        parts.append("\U0001F4F0 <b>Kunning yangiliklari</b>")
+        parts += [f"\u2022 {h}" for h in news[:4]]
+    parts.append("")
+    parts.append("Hammaga xayrli kun! \u2600\ufe0f")
     text = "\n".join(parts)
-    # Kalit bo'lsa, Claude jonliroq qilib yozadi
-    if client is not None:
-        try:
-            news_list = "\n".join(f"- {h}" for h in news) or "- (yo'q)"
-            prompt = (
-                f"Bugun {date_label}. Telegram ob-havo posti uchun QISQA caption yoz. "
-                f"Toshkent: {round(tashkent[0])}\u00b0C, {tashkent[1]}.\n"
-                f"Yangiliklar:\n{news_list}\n\n"
-                "O'zbek tilida, Telegram HTML (faqat <b>), 600 belgidan kam. Tuzilishi: "
-                "emoji bilan sarlavha; 1 jumla ob-havo haqida; <b>Yangiliklar</b> ostida "
-                "ro'yxat; oxirida xayrli kun tilagi. Faqat matnni qaytar."
-            )
-            resp = client.messages.create(
-                model="claude-sonnet-4-6", max_tokens=600,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = "".join(b.text for b in resp.content if b.type == "text").strip() or text
-        except Exception as e:
-            print("Claude caption xato (ob-havo):", e)
     return text[:1024]
 
 
-def currency_caption(date_label, cbu_rate, banks) -> str:
-    """Dollar kursi posti uchun caption."""
-    best_sell = min((b for b in banks if b.get("sell")), key=lambda b: b["sell"], default=None)
-    best_buy = max((b for b in banks if b.get("buy")), key=lambda b: b["buy"], default=None)
+def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
+    """Dollar kursi posti uchun elegant, emoji bilan caption."""
+    extra_rates = extra_rates or []
+    valid = [b for b in banks if b.get("buy") and b.get("sell")]
+    best_sell = min(valid, key=lambda b: b["sell"], default=None)
+    best_buy = max(valid, key=lambda b: b["buy"], default=None)
+
     parts = [f"\U0001F4B5 <b>Dollar kursi</b> \u2014 {date_label}", ""]
-    parts.append(f"Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
+    parts.append(f"\U0001F3E6 Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
     parts.append("")
     if best_buy and best_sell:
         parts.append(
-            f"\U0001F7E2 Dollar SOTMOQCHIMISIZ? Eng qimmat oladi: "
-            f"<b>{best_buy['bank']}</b> \u2014 {best_buy['buy']:,} so'm".replace(",", " ")
+            f"\U0001F7E2 <b>Sotmoqchimisiz?</b> Eng qimmat oladi: "
+            f"<b>{best_buy['bank']}</b> \u2014 {best_buy['buy']:,}".replace(",", " ")
         )
         parts.append(
-            f"\U0001F535 Dollar OLMOQCHIMISIZ? Eng arzon sotadi: "
-            f"<b>{best_sell['bank']}</b> \u2014 {best_sell['sell']:,} so'm".replace(",", " ")
+            f"\U0001F535 <b>Olmoqchimisiz?</b> Eng arzon sotadi: "
+            f"<b>{best_sell['bank']}</b> \u2014 {best_sell['sell']:,}".replace(",", " ")
         )
-    else:
-        parts.append("<i>Banklar kursi hozircha mavjud emas.</i>")
-    parts.append("")
-    parts.append("To'liq jadval rasmda \u2191")
-    return "\n".join(parts)[:1024]
+        parts.append("")
+
+    # Banklar ro'yxati (joy yetguncha), qolgani rasmda
+    flags = {"EUR": "\U0001F1EA\U0001F1FA", "RUB": "\U0001F1F7\U0001F1FA",
+             "GBP": "\U0001F1EC\U0001F1E7", "KZT": "\U0001F1F0\U0001F1FF",
+             "CNY": "\U0001F1E8\U0001F1F3"}
+    tail = []
+    if extra_rates:
+        tail.append("")
+        tail.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy)")
+        line = "  ".join(f"{flags.get(e['code'], '')} {e['code']} {e['rate']}" for e in extra_rates)
+        tail.append(line)
+    tail.append("")
+    tail.append("To'liq jadval rasmda \u2b06\ufe0f")
+    tail_text = "\n".join(tail)
+
+    head_text = "\n".join(parts)
+    bank_lines = ["\U0001F4CA <b>Banklar</b> (olish / sotish)"]
+    shown = 0
+    budget = 1024 - len(head_text) - len(tail_text) - 40  # emoji uchun zaxira
+    for b in valid:
+        line = f"\u2022 {b['bank']} \u2014 {b.get('buy', 0):,} / {b.get('sell', 0):,}".replace(",", " ")
+        if len("\n".join(bank_lines + [line])) > budget:
+            break
+        bank_lines.append(line)
+        shown += 1
+    if shown < len(valid):
+        bank_lines.append(f"\u2022 <i>yana {len(valid) - shown} ta \u2014 rasmda</i>")
+
+    text = head_text + "\n" + "\n".join(bank_lines) + "\n" + tail_text
+    return text[:1024]
 
 
 # ------------------------------------------------------------------ TELEGRAM
@@ -287,11 +343,12 @@ def main() -> None:
     date_label = f"{now.day}-{UZ_MONTHS[now.month]}, {now.year} \u00b7 {UZ_DAYS[now.weekday()]}"
 
     weather = get_all_weather()
-    cbu_text, _ = get_cbu_usd()
+    cbu_text, extra_rates = get_cbu_rates()
     banks = get_bank_rates()
     news = get_top_news()
 
-    print(f"Ob-havo: {len(weather)} viloyat | Banklar: {len(banks)} | Yangilik: {len(news)}")
+    print(f"Ob-havo: {len(weather)} viloyat | Banklar: {len(banks)} | "
+          f"Qo'shimcha valyuta: {len(extra_rates)} | Yangilik: {len(news)}")
 
     ch = str(TELEGRAM_CHANNEL)
 
@@ -300,9 +357,10 @@ def main() -> None:
     post_photo(w_img, weather_caption(date_label, weather, news))
     print("Ob-havo posti yuborildi.")
 
-    # 2-POST: dollar kursi
-    c_img = render_currency_card(date_label, cbu_text, banks, "currency.png", ch)
-    post_photo(c_img, currency_caption(date_label, cbu_text, banks))
+    # 2-POST: dollar + boshqa valyutalar
+    c_img = render_currency_card(date_label, cbu_text, banks, "currency.png", ch,
+                                 extra_rates=extra_rates)
+    post_photo(c_img, currency_caption(date_label, cbu_text, banks, extra_rates))
     print("Dollar kursi posti yuborildi.")
 
 
