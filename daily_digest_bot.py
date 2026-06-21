@@ -24,6 +24,7 @@ Environment variable'lar:
 from __future__ import annotations
 import os
 import re
+import html
 import datetime
 import requests
 import feedparser
@@ -268,54 +269,58 @@ def weather_caption(date_label, weather, news) -> str:
 
 
 def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
-    """Dollar kursi posti uchun elegant, emoji bilan caption."""
+    """Dollar kursi posti uchun elegant, tartibli caption (monospace jadval)."""
     extra_rates = extra_rates or []
     valid = [b for b in banks if b.get("buy") and b.get("sell")]
     best_sell = min(valid, key=lambda b: b["sell"], default=None)
     best_buy = max(valid, key=lambda b: b["buy"], default=None)
 
-    parts = [f"\U0001F4B5 <b>Dollar kursi</b> \u2014 {date_label}", ""]
-    parts.append(f"\U0001F3E6 Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
-    parts.append("")
+    head = [f"\U0001F4B5 <b>Dollar kursi</b> \u2014 {date_label}", ""]
+    head.append(f"\U0001F3E6 Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
+    head.append("")
     if best_buy and best_sell:
-        parts.append(
-            f"\U0001F7E2 <b>Sotmoqchimisiz?</b> Eng qimmat oladi: "
-            f"<b>{best_buy['bank']}</b> \u2014 {best_buy['buy']:,}".replace(",", " ")
-        )
-        parts.append(
-            f"\U0001F535 <b>Olmoqchimisiz?</b> Eng arzon sotadi: "
-            f"<b>{best_sell['bank']}</b> \u2014 {best_sell['sell']:,}".replace(",", " ")
-        )
-        parts.append("")
+        head.append("\U0001F7E2 <b>Sotmoqchilarga</b> \u2014 eng qimmat oladi:")
+        head.append(f"   {best_buy['bank']} \u00b7 <b>{best_buy['buy']:,}</b> so'm".replace(",", " "))
+        head.append("\U0001F535 <b>Olmoqchilarga</b> \u2014 eng arzon sotadi:")
+        head.append(f"   {best_sell['bank']} \u00b7 <b>{best_sell['sell']:,}</b> so'm".replace(",", " "))
+        head.append("")
+    head.append("\U0001F4CA <b>Banklar</b> (olish / sotish):")
+    head_text = "\n".join(head)
 
-    # Banklar ro'yxati (joy yetguncha), qolgani rasmda
+    # Boshqa valyutalar (oxirida)
     flags = {"EUR": "\U0001F1EA\U0001F1FA", "RUB": "\U0001F1F7\U0001F1FA",
              "GBP": "\U0001F1EC\U0001F1E7", "KZT": "\U0001F1F0\U0001F1FF",
              "CNY": "\U0001F1E8\U0001F1F3"}
     tail = []
     if extra_rates:
         tail.append("")
-        tail.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy)")
-        line = "  ".join(f"{flags.get(e['code'], '')} {e['code']} {e['rate']}" for e in extra_rates)
-        tail.append(line)
+        tail.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy):")
+        pairs = [f"{flags.get(e['code'], '')} {e['code']} {e['rate']}" for e in extra_rates]
+        # ikkitadan qatorga
+        for i in range(0, len(pairs), 2):
+            tail.append("   ".join(pairs[i:i + 2]))
     tail.append("")
     tail.append("To'liq jadval rasmda \u2b06\ufe0f")
     tail_text = "\n".join(tail)
 
-    head_text = "\n".join(parts)
-    bank_lines = ["\U0001F4CA <b>Banklar</b> (olish / sotish)"]
-    shown = 0
-    budget = 1024 - len(head_text) - len(tail_text) - 40  # emoji uchun zaxira
+    # Monospace jadval (raqamlar ustun bo'lib tekislanadi)
+    NAME_W = 14
+    budget = 1024 - len(head_text) - len(tail_text) - 30
+    rows, used = [], 0
     for b in valid:
-        line = f"\u2022 {b['bank']} \u2014 {b.get('buy', 0):,} / {b.get('sell', 0):,}".replace(",", " ")
-        if len("\n".join(bank_lines + [line])) > budget:
+        nm = html.escape(b["bank"][:NAME_W])
+        row = f"{nm:<{NAME_W}}{b['buy']:>6}{b['sell']:>7}"
+        block = "<pre>" + "\n".join(rows + [row]) + "</pre>"
+        if len(block) > budget:
             break
-        bank_lines.append(line)
-        shown += 1
-    if shown < len(valid):
-        bank_lines.append(f"\u2022 <i>yana {len(valid) - shown} ta \u2014 rasmda</i>")
+        rows.append(row)
+        used += 1
+    table = "<pre>" + "\n".join(rows) + "</pre>" if rows else ""
+    remainder = ""
+    if used < len(valid):
+        remainder = f"\n\u2022 <i>yana {len(valid) - used} ta bank \u2014 rasmda</i>"
 
-    text = head_text + "\n" + "\n".join(bank_lines) + "\n" + tail_text
+    text = head_text + "\n" + table + remainder + "\n" + tail_text
     return text[:1024]
 
 
