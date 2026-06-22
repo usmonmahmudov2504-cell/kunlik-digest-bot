@@ -13,10 +13,13 @@ Faqat Pillow kerak. Shriftlar loyiha ichidagi fonts/ papkasidan olinadi.
 
 from __future__ import annotations
 import os
-from PIL import Image, ImageDraw, ImageFont
+import math
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # ---- Ranglar ----
 BG     = (15, 23, 42)
+BG_TOP = (16, 24, 43)        # fon gradienti: tepa (biroz quyuq)
+BG_BOT = (24, 34, 58)        # fon gradienti: past (biroz ochiq)
 CARD   = (30, 41, 59)
 CARD2  = (51, 65, 85)
 TEXT   = (241, 245, 249)
@@ -68,12 +71,94 @@ def G(size):  # ob-havo/simvol glyphlari (Inter qoplamaydi) -> DejaVu
 
 
 def _new(W, H):
-    img = Image.new("RGB", (W, H), BG)
+    """Nozik vertikal gradient fon (tekis rang o'rniga -> chuqurlik hissi)."""
+    col = Image.new("RGB", (1, H))
+    px = col.load()
+    for y in range(H):
+        t = y / max(H - 1, 1)
+        px[0, y] = (round(BG_TOP[0] + (BG_BOT[0] - BG_TOP[0]) * t),
+                    round(BG_TOP[1] + (BG_BOT[1] - BG_TOP[1]) * t),
+                    round(BG_TOP[2] + (BG_BOT[2] - BG_TOP[2]) * t))
+    img = col.resize((W, H))
     return img, ImageDraw.Draw(img)
 
 
 def _rrect(d, box, radius, fill):
     d.rounded_rectangle(box, radius=radius, fill=fill)
+
+
+def _panel(img, box, radius=16, fill=CARD, blur=16, dy=7, alpha=120):
+    """Yumshoq soya bilan yumaloq karta chizadi (chuqurlik/floating effekti).
+
+    Soya faqat karta atrofidagi kichik hududda hisoblanadi (tez)."""
+    x0, y0, x1, y1 = [int(v) for v in box]
+    m = blur * 3
+    rx0, ry0 = max(x0 - m, 0), max(y0 - m, 0)
+    rx1, ry1 = min(x1 + m, img.width), min(y1 + m + dy, img.height)
+    sh = Image.new("RGBA", (rx1 - rx0, ry1 - ry0), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle(
+        (x0 - rx0, y0 - ry0 + dy, x1 - rx0, y1 - ry0 + dy), radius=radius, fill=(0, 0, 0, alpha))
+    sh = sh.filter(ImageFilter.GaussianBlur(blur))
+    img.paste(sh, (rx0, ry0), sh)
+    ImageDraw.Draw(img).rounded_rectangle(box, radius=radius, fill=fill)
+
+
+# Karta turi -> sarlavhadagi ikonka (vektor, accent rangda chiziladi)
+def _draw_icon(d, kind, box, color):
+    x0, y0, x1, y1 = box
+    s = x1 - x0
+    cx, cy = x0 + s / 2, y0 + s / 2
+    lw = max(2, round(s * 0.07))
+    if kind == "weather":                                   # quyosh
+        r = s * 0.20
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=color)
+        for a in range(0, 360, 45):
+            rad = math.radians(a)
+            x_in, y_in = cx + math.cos(rad) * r * 1.5, cy + math.sin(rad) * r * 1.5
+            x_out, y_out = cx + math.cos(rad) * r * 2.1, cy + math.sin(rad) * r * 2.1
+            d.line((x_in, y_in, x_out, y_out), fill=color, width=lw)
+    elif kind == "day":                                     # taqvim
+        bx0, by0, bx1, by1 = cx - s * 0.28, cy - s * 0.22, cx + s * 0.28, cy + s * 0.30
+        d.rounded_rectangle((bx0, by0, bx1, by1), radius=s * 0.06, outline=color, width=lw)
+        d.line((bx0, by0 + s * 0.16, bx1, by0 + s * 0.16), fill=color, width=lw)
+        d.line((cx - s * 0.14, by0 - s * 0.06, cx - s * 0.14, by0 + s * 0.06), fill=color, width=lw)
+        d.line((cx + s * 0.14, by0 - s * 0.06, cx + s * 0.14, by0 + s * 0.06), fill=color, width=lw)
+    elif kind == "news":                                    # hujjat/qatorlar
+        for i, frac in enumerate((0.0, 0.33, 0.66)):
+            yy = cy - s * 0.22 + frac * s * 0.66
+            x_end = x1 - s * 0.22 if i < 2 else cx + s * 0.05
+            d.line((x0 + s * 0.22, yy, x_end, yy), fill=color, width=lw)
+    elif kind == "rates":                                   # tangalar (ustma-ust ellips)
+        for i, oy in enumerate((0.22, 0.0, -0.22)):
+            ey = cy + s * oy
+            d.ellipse((cx - s * 0.26, ey - s * 0.10, cx + s * 0.26, ey + s * 0.10),
+                      outline=color, width=lw)
+    elif kind == "currency":                                # banknot
+        d.rounded_rectangle((cx - s * 0.30, cy - s * 0.18, cx + s * 0.30, cy + s * 0.18),
+                            radius=s * 0.05, outline=color, width=lw)
+        r = s * 0.07
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=color, width=lw)
+    elif kind == "advice":                                  # lampochka
+        r = s * 0.20
+        d.ellipse((cx - r, cy - r * 1.1, cx + r, cy + r * 0.9), outline=color, width=lw)
+        d.line((cx - r * 0.5, cy + r, cx + r * 0.5, cy + r), fill=color, width=lw)
+        d.line((cx - r * 0.5, cy + r * 1.4, cx + r * 0.5, cy + r * 1.4), fill=color, width=lw)
+
+
+def _header(img, W, pad, title, date_label, accent=ACCENT, icon=None):
+    d = ImageDraw.Draw(img)
+    _panel(img, (pad, pad, W - pad, pad + 96), 18, CARD)
+    d = ImageDraw.Draw(img)
+    tx = pad + 30
+    if icon:                                                # accent rangli ikonka-chip
+        ch = 60
+        ix0, iy0 = pad + 22, pad + 18
+        _draw_icon(d, icon, (ix0, iy0, ix0 + ch, iy0 + ch), accent)
+        tx = ix0 + ch + 20
+    d.text((tx, pad + 22), title, font=B(48), fill=TEXT)
+    f = R(26)
+    tw = d.textlength(date_label, font=f)
+    d.text((W - pad - 30 - tw, pad + 36), date_label, font=f, fill=accent)
 
 
 def _paste_banner(img, d, banner_path, box, radius=16):
@@ -97,14 +182,6 @@ def _paste_banner(img, d, banner_path, box, radius=16):
     except Exception as e:
         print("banner joylashda xato:", e)
         _rrect(d, box, radius, CARD2)
-
-
-def _header(d, W, pad, title, date_label, accent=ACCENT):
-    _rrect(d, (pad, pad, W - pad, pad + 96), 18, CARD)
-    d.text((pad + 30, pad + 20), title, font=B(50), fill=TEXT)
-    f = R(26)
-    tw = d.textlength(date_label, font=f)
-    d.text((W - pad - 30 - tw, pad + 36), date_label, font=f, fill=accent)
 
 
 def _footer(d, W, H, pad, channel_label, source):
@@ -149,15 +226,30 @@ def _glyph_for(desc):
     return ("\u2600", GOLD)
 
 
+# Harorat -> rang (issiq qizg'ish, sovuq ko'k). O'rtacha haroratlar neytral (TEXT).
+def _temp_color(t):
+    if t >= 38:
+        return (248, 113, 113)     # jazirama -> qizil
+    if t >= 30:
+        return (251, 146, 60)      # issiq -> to'q sariq
+    if t >= 22:
+        return (250, 204, 21)      # iliq -> sariq
+    if t >= 12:
+        return TEXT                # mo'tadil -> oq
+    if t >= 2:
+        return (125, 211, 252)     # salqin -> och ko'k
+    return (96, 165, 250)          # sovuq -> ko'k
+
+
 # ============================================================ 1) BUGUN
 def render_day_card(date_label, weekday, season, day_of_year, days_left,
                     week_no, holidays, out_path="day.png", channel_label=""):
     W, pad = 900, 40
     hol = holidays or []
     hol_lines = hol if hol else ["Bugun maxsus bayram/sana yo'q"]
-    H = pad + 96 + 40 + 96 + 56 + 110 + 30 + 50 + len(hol_lines) * 50 + 60
+    H = pad + 96 + 40 + 96 + 56 + 110 + 30 + 84 + 50 + len(hol_lines) * 50 + 60
     img, d = _new(W, H)
-    _header(d, W, pad, "Bugun", date_label, PURPLE)
+    _header(img, W, pad, "Bugun", date_label, PURPLE, "day")
     y = pad + 96 + 40
 
     d.text((pad + 6, y), weekday, font=B(64), fill=TEXT)
@@ -170,10 +262,24 @@ def render_day_card(date_label, weekday, season, day_of_year, days_left,
     cw = (W - 2 * pad - 2 * 16) // 3
     for i, (lbl, val) in enumerate(chips):
         x = pad + i * (cw + 16)
-        _rrect(d, (x, y, x + cw, y + 92), 14, CARD)
+        _panel(img, (x, y, x + cw, y + 92), 14, CARD, blur=12, dy=5, alpha=90)
         d.text((x + 20, y + 16), lbl, font=R(21), fill=MUTED)
         d.text((x + 20, y + 44), val, font=B(34), fill=TEXT)
     y += 92 + 30
+
+    # Yil progressi: yilning necha foizi o'tdi (vizual progress chizig'i)
+    total = day_of_year + days_left
+    frac = (day_of_year / total) if total else 0
+    d.text((pad + 6, y), "Yil progressi", font=R(22), fill=MUTED)
+    pct = f"{round(frac * 100)}%"
+    fp = B(24)
+    pw = d.textlength(pct, font=fp)
+    d.text((W - pad - 6 - pw, y - 2), pct, font=fp, fill=PURPLE)
+    y += 36
+    _rrect(d, (pad, y, W - pad, y + 22), 11, CARD2)
+    fill_w = pad + max(22, round((W - 2 * pad) * frac))
+    d.rounded_rectangle((pad, y, fill_w, y + 22), radius=11, fill=PURPLE)
+    y += 22 + 26
 
     d.text((pad + 6, y), "Bugungi sana / bayram", font=B(28), fill=TEXT)
     y += 50
@@ -205,7 +311,7 @@ def render_news_card(title, date_label, headlines, out_path="news.png",
     banner_gap = 24 if has_banner else 0
     H = pad + 96 + 40 + banner_h + banner_gap + body_h + 70
     img, d = _new(W, H)
-    _header(d, W, pad, title, date_label, GOLD)
+    _header(img, W, pad, title, date_label, GOLD, "news")
     y = pad + 96 + 40
     if has_banner:
         _paste_banner(img, d, banner_path, (pad, y, W - pad, y + banner_h))
@@ -230,7 +336,7 @@ def render_weather_card(date_label, weather, out_path="weather.png", channel_lab
     rows = (n + cols - 1) // cols
     H = pad + 96 + 40 + rows * (cell_h + gap) + 50
     img, d = _new(W, H)
-    _header(d, W, pad, "Ob-havo", date_label)
+    _header(img, W, pad, "Ob-havo", date_label, ACCENT, "weather")
     f_region, f_temp, f_desc, f_glyph = R(27), B(50), R(22), G(46)
     y0 = pad + 96 + 40
     col_w = (W - 2 * pad - (cols - 1) * gap) // cols
@@ -238,9 +344,9 @@ def render_weather_card(date_label, weather, out_path="weather.png", channel_lab
         c, r = i % cols, i // cols
         x = pad + c * (col_w + gap)
         y = y0 + r * (cell_h + gap)
-        _rrect(d, (x, y, x + col_w, y + cell_h), 16, CARD)
+        _panel(img, (x, y, x + col_w, y + cell_h), 16, CARD, blur=12, dy=5, alpha=90)
         d.text((x + 22, y + 14), region, font=f_region, fill=MUTED)
-        d.text((x + 22, y + 44), f"{round(temp)}\u00b0", font=f_temp, fill=TEXT)
+        d.text((x + 22, y + 44), f"{round(temp)}\u00b0", font=f_temp, fill=_temp_color(temp))
         glyph, gcol = _glyph_for(desc)
         gw = d.textlength(glyph, font=f_glyph)
         d.text((x + col_w - 24 - gw, y + 30), glyph, font=f_glyph, fill=gcol)
@@ -257,7 +363,7 @@ def render_currency_overview_card(date_label, rows, out_path="rates.png", channe
     W, pad, row_h = 900, 40, 60
     H = pad + 96 + 40 + 44 + len(rows) * row_h + 60
     img, d = _new(W, H)
-    _header(d, W, pad, "Kurslar", date_label, GREEN)
+    _header(img, W, pad, "Kurslar", date_label, GREEN, "rates")
     y = pad + 96 + 40
     d.text((pad + 4, y), "Markaziy bank rasmiy kursi (1 birlik uchun)", font=R(22), fill=MUTED)
     y += 44
@@ -281,7 +387,7 @@ def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png",
     W, pad, row_h, callout_h = 900, 40, 54, 150
     H = pad + 96 + 40 + 50 + callout_h + 24 + 56 + len(banks) * row_h + 120 + 50
     img, d = _new(W, H)
-    _header(d, W, pad, "Dollar kursi", date_label)
+    _header(img, W, pad, "Dollar kursi", date_label, ACCENT, "currency")
     f_hs, f_row, f_rowb = R(22), R(27), B(27)
     f_lbl, f_big, f_sub, f_tiny = R(23), B(44), R(21), R(17)
     y = pad + 96 + 40
@@ -301,13 +407,13 @@ def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png",
     gap = 20
     cw = (W - 2 * pad - gap) // 2
     cy = y
-    _rrect(d, (pad, cy, pad + cw, cy + callout_h), 16, CARD)
+    _panel(img, (pad, cy, pad + cw, cy + callout_h), 16, CARD, blur=14, dy=6, alpha=100)
     d.rounded_rectangle((pad, cy, pad + 9, cy + callout_h), radius=4, fill=GREEN)
     d.text((pad + 28, cy + 20), "Dollar SOTMOQCHIMISIZ?", font=f_lbl, fill=TEXT)
     d.text((pad + 28, cy + 54), fmt(max_buy) + " so'm", font=f_big, fill=GREEN)
     d.text((pad + 28, cy + 110), f"{best_buy_bank} \u2014 eng qimmat oladi", font=f_sub, fill=MUTED)
     x2 = pad + cw + gap
-    _rrect(d, (x2, cy, x2 + cw, cy + callout_h), 16, CARD)
+    _panel(img, (x2, cy, x2 + cw, cy + callout_h), 16, CARD, blur=14, dy=6, alpha=100)
     d.rounded_rectangle((x2, cy, x2 + 9, cy + callout_h), radius=4, fill=ACCENT)
     d.text((x2 + 28, cy + 20), "Dollar OLMOQCHIMISIZ?", font=f_lbl, fill=TEXT)
     d.text((x2 + 28, cy + 54), fmt(min_sell) + " so'm", font=f_big, fill=ACCENT)
@@ -359,7 +465,7 @@ def render_advice_card(date_label, kind, text, out_path="advice.png", channel_la
     body_h = len(lines) * 50
     H = pad + 96 + 40 + 70 + 40 + body_h + 70
     img, d = _new(W, H)
-    _header(d, W, pad, "Kun maslahati", date_label, TEAL)
+    _header(img, W, pad, "Kun maslahati", date_label, TEAL, "advice")
     y = pad + 96 + 40
 
     klbl = kind.upper()
