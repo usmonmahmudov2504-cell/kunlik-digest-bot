@@ -57,6 +57,29 @@ def _rrect(d, box, radius, fill):
     d.rounded_rectangle(box, radius=radius, fill=fill)
 
 
+def _paste_banner(img, d, banner_path, box, radius=16):
+    """Tashqi rasmni (banner) yumaloq burchakli qilib kartaga joylashtiradi.
+
+    Rasm box o'lchamiga 'cover' rejimida kesiladi (nisbat buzilmaydi). Xato bo'lsa
+    o'rniga oddiy karta foni chiziladi (post baribir chiqaveradi)."""
+    x0, y0, x1, y1 = box
+    tw, th = x1 - x0, y1 - y0
+    try:
+        src = Image.open(banner_path).convert("RGB")
+        scale = max(tw / src.width, th / src.height)
+        src = src.resize((max(tw, round(src.width * scale)),
+                          max(th, round(src.height * scale))))
+        left = (src.width - tw) // 2
+        top = (src.height - th) // 2
+        crop = src.crop((left, top, left + tw, top + th))
+        mask = Image.new("L", (tw, th), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, tw - 1, th - 1), radius=radius, fill=255)
+        img.paste(crop, (x0, y0), mask)
+    except Exception as e:
+        print("banner joylashda xato:", e)
+        _rrect(d, box, radius, CARD2)
+
+
 def _header(d, W, pad, title, date_label, accent=ACCENT):
     _rrect(d, (pad, pad, W - pad, pad + 96), 18, CARD)
     d.text((pad + 30, pad + 20), title, font=B(50), fill=TEXT)
@@ -147,16 +170,27 @@ def render_day_card(date_label, weekday, season, day_of_year, days_left,
 
 # ============================================================ 2) YANGILIKLAR
 def render_news_card(title, date_label, headlines, out_path="news.png",
-                     channel_label="", source="Manba: gazeta.uz, daryo.uz"):
+                     channel_label="", source="Manba: gazeta.uz, daryo.uz",
+                     banner_path=None):
     W, pad = 900, 40
     f_item, f_num = R(27), B(27)
     max_w = W - 2 * pad - 70
-    items = [_wrap(h, f_item, max_w) for h in headlines[:6]]
+
+    def _title(h):
+        return h["title"] if isinstance(h, dict) else h
+
+    items = [_wrap(_title(h), f_item, max_w) for h in headlines[:6]]
     body_h = sum(len(w) * 38 + 22 for w in items) or 60
-    H = pad + 96 + 40 + body_h + 70
+    has_banner = bool(banner_path and os.path.exists(banner_path))
+    banner_h = 300 if has_banner else 0
+    banner_gap = 24 if has_banner else 0
+    H = pad + 96 + 40 + banner_h + banner_gap + body_h + 70
     img, d = _new(W, H)
     _header(d, W, pad, title, date_label, GOLD)
     y = pad + 96 + 40
+    if has_banner:
+        _paste_banner(img, d, banner_path, (pad, y, W - pad, y + banner_h))
+        y += banner_h + banner_gap
     for i, lines in enumerate(items, 1):
         d.text((pad + 6, y), f"{i}.", font=f_num, fill=GOLD)
         for ln in lines:

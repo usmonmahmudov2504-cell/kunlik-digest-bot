@@ -23,6 +23,7 @@ Environment variable'lar:
 
 from __future__ import annotations
 import os
+import io
 import re
 import html
 import json
@@ -43,6 +44,9 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHANNEL = os.environ["TELEGRAM_CHANNEL"]
 
 UA = {"User-Agent": "Mozilla/5.0 (digest-bot)"}
+# Maqola sahifalaridan rasm (og:image) olishda haqiqiy brauzer UA ishonchliroq.
+UA_WEB = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"}
 
 client = None
 if ANTHROPIC_API_KEY:
@@ -256,7 +260,11 @@ BIZ_KW = ["biznes", "iqtisod", "iqtisodiy", "soliq", "valyuta", "eksport", "impo
           "lizing", "soliqlar", "byudjetdan", "tovar", "narxlar", "tender"]
 
 
-def get_business_news(limit: int = 5) -> list[str]:
+def get_business_news(limit: int = 5) -> list[dict]:
+    """Biznes sarlavhalarini {"title","link"} ko'rinishida qaytaradi.
+
+    link -- maqola manzili; undan keyinroq banner rasmi (og:image) olinadi.
+    """
     biz, other, seen = [], [], set()
     for url, all_biz in BUSINESS_FEEDS:
         try:
@@ -269,14 +277,60 @@ def get_business_news(limit: int = 5) -> list[str]:
             if not title or title in seen:
                 continue
             seen.add(title)
+            item = {"title": title, "link": e.get("link", "")}
             if all_biz or any(k in title.lower() for k in BIZ_KW):
-                biz.append(title)
+                biz.append(item)
             else:
-                other.append(title)
+                other.append(item)
     result = biz[:limit]
     if len(result) < limit:                # yetmasa, umumiy bilan to'ldiramiz
         result += other[: limit - len(result)]
     return result
+
+
+def _og_image_url(article_url: str) -> str | None:
+    """Maqola sahifasidan og:image (yoki twitter:image) manzilini oladi."""
+    try:
+        resp = requests.get(article_url, headers=UA_WEB, timeout=15)
+        resp.raise_for_status()
+    except Exception:
+        return None
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for prop in ("og:image", "twitter:image"):
+        tag = (soup.find("meta", attrs={"property": prop})
+               or soup.find("meta", attrs={"name": prop}))
+        if tag and tag.get("content"):
+            return tag["content"].strip()
+    return None
+
+
+def fetch_news_image(items: list[dict], out_path: str = "news_banner.png") -> str | None:
+    """Sarlavhalardan birinchi mos maqolaning rasmini yuklab, PNG saqlaydi.
+
+    Banner sifatida ishlatiladi. Hech qaysidan rasm topilmasa None qaytaradi
+    (u holda karta oddiy, rasmsiz chiqadi)."""
+    for it in items[:6]:
+        link = it.get("link") if isinstance(it, dict) else None
+        if not link:
+            continue
+        src = _og_image_url(link)
+        if not src:
+            continue
+        try:
+            r = requests.get(src, headers=UA_WEB, timeout=20)
+            if r.status_code != 200 or "image" not in r.headers.get("content-type", ""):
+                continue
+            from PIL import Image
+            im = Image.open(io.BytesIO(r.content)).convert("RGB")
+            if im.width < 300 or im.height < 150:   # juda kichik/ikona rasmlarni o'tkazib yuboramiz
+                continue
+            im.save(out_path)
+            print(f"Banner rasm: {src[:70]}")
+            return out_path
+        except Exception as e:
+            print("Banner rasm olishda xato:", e)
+            continue
+    return None
 
 
 # ------------------------------------------------------------------ BUGUN (taqvim)
@@ -436,7 +490,8 @@ def business_caption(date_label, headlines) -> str:
     parts = [f"\U0001F4BC <b>Biznes ma'lumotlari</b> \u2014 {date_label}", ""]
     if headlines:
         for i, h in enumerate(headlines[:6], 1):
-            parts.append(f"<b>{i}.</b> {h}")
+            title = h["title"] if isinstance(h, dict) else h
+            parts.append(f"<b>{i}.</b> {title}")
     else:
         parts.append("<i>Bugun biznes yangiligi topilmadi.</i>")
     parts.append("")
@@ -644,9 +699,10 @@ def main() -> None:
     # --- C guruh: Biznes ---
     if want("C"):
         business = get_business_news()
+        banner = fetch_news_image(business, "news_banner.png")
         results.append(safe_post(
             lambda: render_news_card("Biznes", date_label, business, "p2.png", ch,
-                                     "Manba: spot.uz, kun.uz, daryo.uz"),
+                                     "Manba: spot.uz, kun.uz, daryo.uz", banner),
             business_caption(date_label, business), "Biznes"))
 
     # --- D guruh: Kurslar + Dollar ---
