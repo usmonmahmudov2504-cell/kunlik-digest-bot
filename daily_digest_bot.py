@@ -333,6 +333,35 @@ def fetch_news_image(items: list[dict], out_path: str = "news_banner.png") -> st
     return None
 
 
+# ------------------------------------------------------------------ TEZKOR XABAR (holat)
+# Allaqachon post qilingan xabarlar ro'yxati shu faylda saqlanadi (takror oldini olish).
+# GitHub Actions har ish oxirida bu faylni repoga commit qiladi.
+_STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "posted_news.json")
+MAX_ALERTS = 2        # bitta ishda ko'pi bilan necha yangi xabar post qilinadi
+STATE_KEEP = 200      # holatda saqlanadigan oxirgi yozuvlar soni
+
+
+def _news_key(item: dict) -> str:
+    return (item.get("link") or item.get("title") or "").strip()
+
+
+def load_posted() -> list[str]:
+    try:
+        with open(_STATE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def save_posted(keys: list[str]) -> None:
+    try:
+        os.makedirs(os.path.dirname(_STATE_PATH), exist_ok=True)
+        with open(_STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(keys[-STATE_KEEP:], f, ensure_ascii=False, indent=0)
+    except Exception as e:
+        print("Holatni saqlashda xato:", e)
+
+
 # ------------------------------------------------------------------ BUGUN (taqvim)
 SEASONS = {12: "Qish", 1: "Qish", 2: "Qish", 3: "Bahor", 4: "Bahor", 5: "Bahor",
            6: "Yoz", 7: "Yoz", 8: "Yoz", 9: "Kuz", 10: "Kuz", 11: "Kuz"}
@@ -499,6 +528,16 @@ def business_caption(date_label, headlines) -> str:
     return _finish(parts)
 
 
+def breaking_caption(date_label, item) -> str:
+    """Tezkor (real-vaqt) bitta biznes xabari uchun caption."""
+    title = item["title"] if isinstance(item, dict) else item
+    parts = [f"\U0001F534 <b>Tezkor xabar</b> \u2014 biznes", "",
+             f"<b>{title}</b>", "",
+             f"<i>{date_label}</i>",
+             "\U0001F4E2 Batafsil \u2014 manbalarda"]
+    return _finish(parts)
+
+
 def currency_overview_caption(date_label, rows) -> str:
     """4-post: umumiy valyuta kurslari caption."""
     flags = {"USD": "\U0001F1FA\U0001F1F8", "EUR": "\U0001F1EA\U0001F1FA",
@@ -625,25 +664,28 @@ UZ_DAYS = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", 
 UZ_MONTHS = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun",
              "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"]
 
-# Har guruhning mo'ljal vaqti (Toshkent soati, kasrli). GitHub Actions cron'lari
-# shu vaqtlarga qo'yilgan. Pastdagi darvoza bilan birga ishlaydi.
-GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "C": 9.0, "D": 10.0}
+# Jadval bo'yicha guruhlarning mo'ljal vaqti (Toshkent soati, kasrli). C guruh
+# endi tezkor kuzatuvchi (har 15 daqiqa) -> u jadval emas, faol-soat oynasi bilan ishlaydi.
+GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "D": 10.0}
 # Mo'ljaldan keyin shu qancha soatgacha kechikkan run baribir post tashlaydi.
 # GitHub'ning odatdagi kechikishini yutish uchun saxiy, lekin tunni qoplamaydi.
 MAX_DELAY_HOURS = 5.0
+# Tezkor xabarlar (C guruh) faol bo'ladigan soatlar oynasi (Toshkent). Tunda jim.
+NEWS_ACTIVE = (7, 23)
 
 
 def within_window(group: str, now) -> bool:
-    """Kechikkan run mo'ljal oynasi ichidami? (tunda noto'g'ri post chiqmasligi uchun).
+    """Run hozir post tashlashga ruxsat etilgan oynadami?
 
-    GitHub Actions cron'lari "high load" paytida soatlab kechikishi mumkin va
-    kechikkan run kechqurun "quvib yetib" ishlaydi -> natijada post noto'g'ri
-    vaqtda (masalan tunda) chiqadi. Bu darvoza shunday hollarni to'xtatadi.
+    - A/B/D (jadval): GitHub kechikishi tunga cho'zilsa post chiqmasin.
+    - C (tezkor kuzatuvchi): faqat faol soatlarda (07-23) ishlasin.
     """
     if os.environ.get("FORCE_POST"):     # majburiy yuborish (qo'lda test uchun)
         return True
     if group == "ALL":                   # qo'lda ishga tushirish -> doim chiqsin
         return True
+    if group == "C":                     # tezkor kuzatuvchi -> faol-soat oynasi
+        return NEWS_ACTIVE[0] <= now.hour < NEWS_ACTIVE[1]
     target = GROUP_TARGET_HOUR.get(group)
     if target is None:                   # noma'lum guruh -> to'smaymiz
         return True
@@ -659,7 +701,7 @@ def main() -> None:
     # Qaysi guruh postlari yuboriladi (vaqt bo'yicha). Qo'lda ishga tushirsa -> ALL.
     #   A = Bugun + Kun maslahati (07:00)
     #   B = Ob-havo (07:30)
-    #   C = Biznes (09:00)
+    #   C = Tezkor biznes xabarlari (har 15 daqiqa, faqat yangilarini)
     #   D = Kurslar + Dollar (10:00)
     group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
 
@@ -696,14 +738,27 @@ def main() -> None:
             lambda: render_weather_card(date_label, weather, "p4.png", ch),
             weather_caption(date_label, weather), "Ob-havo"))
 
-    # --- C guruh: Biznes ---
+    # --- C guruh: Tezkor biznes xabarlari (real-vaqt, faqat yangilarini) ---
     if want("C"):
-        business = get_business_news()
-        banner = fetch_news_image(business, "news_banner.png")
-        results.append(safe_post(
-            lambda: render_news_card("Biznes", date_label, business, "p2.png", ch,
-                                     "Manba: spot.uz, kun.uz, daryo.uz", banner),
-            business_caption(date_label, business), "Biznes"))
+        business = get_business_news(limit=10)
+        posted = load_posted()
+        seen = set(posted)
+        fresh = [it for it in business if _news_key(it) and _news_key(it) not in seen]
+        fresh = fresh[:MAX_ALERTS]
+        if not fresh:
+            print("Yangi biznes xabar yo'q (takror oldini olindi).")
+        for it in fresh:
+            banner = fetch_news_image([it], "news_banner.png")
+            ok = safe_post(
+                lambda it=it, banner=banner: render_news_card(
+                    "Biznes", date_label, [it], "p2.png", ch,
+                    "Manba: spot.uz, kun.uz, daryo.uz", banner),
+                breaking_caption(date_label, it), "Tezkor xabar")
+            results.append(ok)
+            if ok:
+                posted.append(_news_key(it))
+        if fresh:
+            save_posted(posted)
 
     # --- D guruh: Kurslar + Dollar ---
     if want("D"):
@@ -718,7 +773,9 @@ def main() -> None:
 
     ok = sum(results)
     print(f"\nGuruh: {group} | Natija: {ok}/{len(results)} post yuborildi.")
-    if not results or ok < len(results):
+    # Faqat haqiqiy post xatosi bo'lsa 1 bilan chiqamiz. Hech post bo'lmasligi
+    # (masalan tezkor kuzatuvchida yangi xabar yo'qligi) -> normal holat (exit 0).
+    if results and ok < len(results):
         import sys
         sys.exit(1)
 
