@@ -30,6 +30,7 @@ DIVIDER = (51, 65, 85)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_DIRS = [os.path.join(HERE, "fonts"), "/usr/share/fonts/truetype/dejavu", r"C:\Windows\Fonts"]
+INTER_FILE = "Inter-Variable.ttf"   # zamonaviy variable shrift (matn uchun)
 
 
 def _font(name, size):
@@ -40,11 +41,29 @@ def _font(name, size):
     return ImageFont.truetype(name, size)
 
 
-def B(size):  # bold
-    return _font("DejaVuSans-Bold.ttf", size)
+def _inter(size, variation, fallback):
+    """Inter (variable) ni kerakli qalinlikda yuklaydi. Bo'lmasa DejaVu'ga tushadi."""
+    for dpath in FONT_DIRS:
+        p = os.path.join(dpath, INTER_FILE)
+        if os.path.exists(p):
+            f = ImageFont.truetype(p, size)
+            try:
+                f.set_variation_by_name(variation)
+            except Exception:
+                pass
+            return f
+    return _font(fallback, size)
 
 
-def R(size):  # regular
+def B(size):  # bold (matn)
+    return _inter(size, "Bold", "DejaVuSans-Bold.ttf")
+
+
+def R(size):  # regular (matn)
+    return _inter(size, "Regular", "DejaVuSans.ttf")
+
+
+def G(size):  # ob-havo/simvol glyphlari (Inter qoplamaydi) -> DejaVu
     return _font("DejaVuSans.ttf", size)
 
 
@@ -212,7 +231,7 @@ def render_weather_card(date_label, weather, out_path="weather.png", channel_lab
     H = pad + 96 + 40 + rows * (cell_h + gap) + 50
     img, d = _new(W, H)
     _header(d, W, pad, "Ob-havo", date_label)
-    f_region, f_temp, f_desc, f_glyph = R(27), B(50), R(22), R(46)
+    f_region, f_temp, f_desc, f_glyph = R(27), B(50), R(22), G(46)
     y0 = pad + 96 + 40
     col_w = (W - 2 * pad - (cols - 1) * gap) // cols
     for i, (region, (temp, desc)) in enumerate(weather.items()):
