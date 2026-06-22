@@ -3,10 +3,12 @@ name: Kunlik digest post
 on:
   schedule:
     # Vaqtlar UTC'da. Toshkent = UTC+5.
-    - cron: "0 2 * * *"   # 07:00 Toshkent -> A guruh: Bugun + Kun maslahati
-    - cron: "30 2 * * *"  # 07:30 Toshkent -> B guruh: Ob-havo
-    - cron: "0 4 * * *"   # 09:00 Toshkent -> C guruh: Biznes
-    - cron: "0 5 * * *"   # 10:00 Toshkent -> D guruh: Kurslar + Dollar
+    # Daqiqalar ataylab yumaloq emas (:00/:30 emas): GitHub Actions cron'lari
+    # yumaloq vaqtlarda tiqilib soatlab kechikadi. "Toq" daqiqa kechikishni kamaytiradi.
+    - cron: "13 2 * * *"  # ~07:13 Toshkent -> A guruh: Bugun + Kun maslahati
+    - cron: "41 2 * * *"  # ~07:41 Toshkent -> B guruh: Ob-havo
+    - cron: "9 4 * * *"   # ~09:09 Toshkent -> C guruh: Biznes
+    - cron: "7 5 * * *"   # ~10:07 Toshkent -> D guruh: Kurslar + Dollar
   workflow_dispatch:
     inputs:
       group:
@@ -30,10 +32,10 @@ jobs:
         id: grp
         run: |
           case "${{ github.event.schedule }}" in
-            "0 2 * * *")  echo "group=A" >> "$GITHUB_OUTPUT" ;;
-            "30 2 * * *") echo "group=B" >> "$GITHUB_OUTPUT" ;;
-            "0 4 * * *")  echo "group=C" >> "$GITHUB_OUTPUT" ;;
-            "0 5 * * *")  echo "group=D" >> "$GITHUB_OUTPUT" ;;
+            "13 2 * * *") echo "group=A" >> "$GITHUB_OUTPUT" ;;
+            "41 2 * * *") echo "group=B" >> "$GITHUB_OUTPUT" ;;
+            "9 4 * * *")  echo "group=C" >> "$GITHUB_OUTPUT" ;;
+            "7 5 * * *")  echo "group=D" >> "$GITHUB_OUTPUT" ;;
             *)            echo "group=${{ github.event.inputs.group || 'all' }}" >> "$GITHUB_OUTPUT" ;;
           esac
 

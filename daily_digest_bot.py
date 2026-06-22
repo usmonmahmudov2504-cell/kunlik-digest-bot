@@ -570,6 +570,31 @@ UZ_DAYS = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", 
 UZ_MONTHS = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun",
              "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"]
 
+# Har guruhning mo'ljal vaqti (Toshkent soati, kasrli). GitHub Actions cron'lari
+# shu vaqtlarga qo'yilgan. Pastdagi darvoza bilan birga ishlaydi.
+GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "C": 9.0, "D": 10.0}
+# Mo'ljaldan keyin shu qancha soatgacha kechikkan run baribir post tashlaydi.
+# GitHub'ning odatdagi kechikishini yutish uchun saxiy, lekin tunni qoplamaydi.
+MAX_DELAY_HOURS = 5.0
+
+
+def within_window(group: str, now) -> bool:
+    """Kechikkan run mo'ljal oynasi ichidami? (tunda noto'g'ri post chiqmasligi uchun).
+
+    GitHub Actions cron'lari "high load" paytida soatlab kechikishi mumkin va
+    kechikkan run kechqurun "quvib yetib" ishlaydi -> natijada post noto'g'ri
+    vaqtda (masalan tunda) chiqadi. Bu darvoza shunday hollarni to'xtatadi.
+    """
+    if os.environ.get("FORCE_POST"):     # majburiy yuborish (qo'lda test uchun)
+        return True
+    if group == "ALL":                   # qo'lda ishga tushirish -> doim chiqsin
+        return True
+    target = GROUP_TARGET_HOUR.get(group)
+    if target is None:                   # noma'lum guruh -> to'smaymiz
+        return True
+    cur = now.hour + now.minute / 60.0   # now -- Toshkent vaqti (UTC+5)
+    return target <= cur <= target + MAX_DELAY_HOURS
+
 
 def main() -> None:
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
@@ -582,6 +607,14 @@ def main() -> None:
     #   C = Biznes (09:00)
     #   D = Kurslar + Dollar (10:00)
     group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
+
+    # Darvoza: GitHub Actions juda kechikib ishga tushgan bo'lsa (masalan tunda),
+    # noto'g'ri vaqtda post chiqarmaymiz. Bu xato emas -> 0 bilan chiqamiz.
+    if not within_window(group, now):
+        clock = f"{now.hour:02d}:{now.minute:02d}"
+        print(f"Guruh {group}: run mo'ljal oynasidan tashqarida (hozir {clock} "
+              f"Toshkent). Post tashlanmadi. Majburlash uchun FORCE_POST=1.")
+        return
 
     def want(g):
         return group == "ALL" or group == g
