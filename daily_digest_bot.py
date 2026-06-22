@@ -248,9 +248,12 @@ BUSINESS_FEEDS = [
     ("https://daryo.uz/rss", False),
     ("https://www.gazeta.uz/uz/rss/", False),
 ]
-BIZ_KW = ["biznes", "iqtisod", "soliq", "valyuta", "eksport", "import", "investitsiya",
-          "bank", "byudjet", "narx", "tarif", "kredit", "savdo", "bozor", "kompaniya",
-          "infl", "foiz", "ishlab chiqar", "tadbirkor", "iqtisodiy", "pul", "aksiya"]
+BIZ_KW = ["biznes", "iqtisod", "iqtisodiy", "soliq", "valyuta", "eksport", "import",
+          "investitsiya", "bank", "byudjet", "narx", "tarif", "kredit", "savdo", "bozor",
+          "kompaniya", "infl", "foiz", "ishlab chiqar", "tadbirkor", "pul", "aksiya",
+          "qonun", "qaror", "farmon", "bojxona", "litsenziya", "imtiyoz", "subsidiya",
+          "deklaratsiya", "norma", "reglament", "to'lov", "ish o'rni", "ish haqi",
+          "lizing", "soliqlar", "byudjetdan", "tovar", "narxlar", "tender"]
 
 
 def get_business_news(limit: int = 5) -> list[str]:
@@ -364,6 +367,25 @@ def _wx_emoji(desc: str) -> str:
     return "\u2600\ufe0f"              # ☀️
 
 
+def _channel_footer() -> str:
+    """Har post tagiga bosiladigan kanal havolasi."""
+    ch = str(TELEGRAM_CHANNEL).strip()
+    if ch.startswith("@"):
+        uname = ch[1:]
+        return f'\n\n\U0001F449 <a href="https://t.me/{uname}">{ch}</a>'
+    return ""
+
+
+def _append_footer(text: str) -> str:
+    footer = _channel_footer()
+    return (text[:1024 - len(footer)] + footer) if footer else text[:1024]
+
+
+def _finish(parts) -> str:
+    """Caption qatorlarini yig'ib, kanal havolasini qo'shadi (limit ichida)."""
+    return _append_footer("\n".join(parts))
+
+
 def weather_caption(date_label, weather) -> str:
     """Ob-havo posti uchun elegant, emoji bilan caption (barcha viloyatlar)."""
     parts = [f"\U0001F326\ufe0f <b>Ob-havo</b> \u2014 {date_label}", ""]
@@ -371,7 +393,7 @@ def weather_caption(date_label, weather) -> str:
         parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>  <i>{desc}</i>")
     parts.append("")
     parts.append("Hammaga xayrli kun! \u2600\ufe0f")
-    return "\n".join(parts)[:1024]
+    return _finish(parts)
 
 
 def day_caption(date_label, info) -> str:
@@ -406,7 +428,7 @@ def day_caption(date_label, info) -> str:
             text = "".join(b.text for b in resp.content if b.type == "text").strip() or text
         except Exception as e:
             print("Claude caption xato (bugun):", e)
-    return text[:1024]
+    return _append_footer(text)
 
 
 def business_caption(date_label, headlines) -> str:
@@ -419,7 +441,7 @@ def business_caption(date_label, headlines) -> str:
         parts.append("<i>Bugun biznes yangiligi topilmadi.</i>")
     parts.append("")
     parts.append("\U0001F4E2 Batafsil \u2014 manbalarda")
-    return "\n".join(parts)[:1024]
+    return _finish(parts)
 
 
 def currency_overview_caption(date_label, rows) -> str:
@@ -436,7 +458,7 @@ def currency_overview_caption(date_label, rows) -> str:
                      f"({r['unit']}) \u2014 {r['rate']} so'm")
     parts.append("")
     parts.append("\U0001F4B5 Dollarning banklar bo'yicha kursi \u2014 keyingi postda")
-    return "\n".join(parts)[:1024]
+    return _finish(parts)
 
 
 def advice_caption(date_label, tip) -> str:
@@ -448,7 +470,7 @@ def advice_caption(date_label, tip) -> str:
     parts.append(f"\u00ab{tip['text']}\u00bb")
     parts.append("")
     parts.append("Kuningiz unumli o'tsin! \U0001F4AA")
-    return "\n".join(parts)[:1024]
+    return _finish(parts)
 
 
 def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
@@ -488,7 +510,7 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
 
     # Monospace jadval (raqamlar ustun bo'lib tekislanadi)
     NAME_W = 14
-    budget = 1024 - len(head_text) - len(tail_text) - 30
+    budget = 1024 - len(head_text) - len(tail_text) - len(_channel_footer()) - 30
     rows, used = [], 0
     for b in valid:
         nm = html.escape(b["bank"][:NAME_W])
@@ -504,7 +526,7 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
         remainder = f"\n\u2022 <i>yana {len(valid) - used} ta bank \u2014 rasmda</i>"
 
     text = head_text + "\n" + table + remainder + "\n" + tail_text
-    return text[:1024]
+    return _append_footer(text)
 
 
 # ------------------------------------------------------------------ TELEGRAM
@@ -554,54 +576,60 @@ def main() -> None:
     date_label = f"{now.day}-{UZ_MONTHS[now.month]}, {now.year} \u00b7 {UZ_DAYS[now.weekday()]}"
     ch = str(TELEGRAM_CHANNEL)
 
-    # Ma'lumotlarni yig'amiz
-    day_info = get_day_info(now)
-    business = get_business_news()
-    weather = get_all_weather()
-    cbu_text, overview, extra_rates = get_cbu_rates()
-    banks = get_bank_rates()
-    tip = get_daily_tip(now)
+    # Qaysi guruh postlari yuboriladi (vaqt bo'yicha). Qo'lda ishga tushirsa -> ALL.
+    #   A = Bugun + Kun maslahati (07:00)
+    #   B = Ob-havo (07:30)
+    #   C = Biznes (09:00)
+    #   D = Kurslar + Dollar (10:00)
+    group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
 
-    print(f"Bugun: {len(day_info['holidays'])} bayram | Biznes: {len(business)} | "
-          f"Ob-havo: {len(weather)} viloyat | Valyuta: {len(overview)} | Banklar: {len(banks)}")
+    def want(g):
+        return group == "ALL" or group == g
 
     results = []
-    # 1-POST: Bugun
-    results.append(safe_post(
-        lambda: render_day_card(date_label, day_info["weekday"], day_info["season"],
-                                day_info["day_of_year"], day_info["days_left"],
-                                day_info["week_no"], day_info["holidays"], "p1.png", ch),
-        day_caption(date_label, day_info), "1/6 Bugun"))
 
-    # 2-POST: Biznes
-    results.append(safe_post(
-        lambda: render_news_card("Biznes", date_label, business, "p2.png", ch,
-                                 "Manba: spot.uz, kun.uz, daryo.uz"),
-        business_caption(date_label, business), "2/6 Biznes"))
+    # --- A guruh: Bugun + Kun maslahati ---
+    if want("A"):
+        day_info = get_day_info(now)
+        tip = get_daily_tip(now)
+        results.append(safe_post(
+            lambda: render_day_card(date_label, day_info["weekday"], day_info["season"],
+                                    day_info["day_of_year"], day_info["days_left"],
+                                    day_info["week_no"], day_info["holidays"], "p1.png", ch),
+            day_caption(date_label, day_info), "Bugun"))
+        results.append(safe_post(
+            lambda: render_advice_card(date_label, tip["kind"], tip["text"], "p3.png", ch),
+            advice_caption(date_label, tip), "Kun maslahati"))
 
-    # 3-POST: Kun maslahati
-    results.append(safe_post(
-        lambda: render_advice_card(date_label, tip["kind"], tip["text"], "p3.png", ch),
-        advice_caption(date_label, tip), "3/6 Kun maslahati"))
+    # --- B guruh: Ob-havo ---
+    if want("B"):
+        weather = get_all_weather()
+        results.append(safe_post(
+            lambda: render_weather_card(date_label, weather, "p4.png", ch),
+            weather_caption(date_label, weather), "Ob-havo"))
 
-    # 4-POST: Ob-havo
-    results.append(safe_post(
-        lambda: render_weather_card(date_label, weather, "p4.png", ch),
-        weather_caption(date_label, weather), "4/6 Ob-havo"))
+    # --- C guruh: Biznes ---
+    if want("C"):
+        business = get_business_news()
+        results.append(safe_post(
+            lambda: render_news_card("Biznes", date_label, business, "p2.png", ch,
+                                     "Manba: spot.uz, kun.uz, daryo.uz"),
+            business_caption(date_label, business), "Biznes"))
 
-    # 5-POST: Umumiy kurslar
-    results.append(safe_post(
-        lambda: render_currency_overview_card(date_label, overview, "p5.png", ch),
-        currency_overview_caption(date_label, overview), "5/6 Kurslar"))
-
-    # 6-POST: Dollar batafsil
-    results.append(safe_post(
-        lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch),
-        currency_caption(date_label, cbu_text, banks), "6/6 Dollar"))
+    # --- D guruh: Kurslar + Dollar ---
+    if want("D"):
+        cbu_text, overview, _ = get_cbu_rates()
+        banks = get_bank_rates()
+        results.append(safe_post(
+            lambda: render_currency_overview_card(date_label, overview, "p5.png", ch),
+            currency_overview_caption(date_label, overview), "Kurslar"))
+        results.append(safe_post(
+            lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch),
+            currency_caption(date_label, cbu_text, banks), "Dollar"))
 
     ok = sum(results)
-    print(f"\nNatija: {ok}/6 post yuborildi.")
-    if ok < len(results):
+    print(f"\nGuruh: {group} | Natija: {ok}/{len(results)} post yuborildi.")
+    if not results or ok < len(results):
         import sys
         sys.exit(1)
 

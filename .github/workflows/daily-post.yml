@@ -2,9 +2,16 @@ name: Kunlik digest post
 
 on:
   schedule:
-    # 07:00 Toshkent vaqti = 02:00 UTC (Toshkent UTC+5)
-    - cron: "0 2 * * *"
-  workflow_dispatch: {}
+    # Vaqtlar UTC'da. Toshkent = UTC+5.
+    - cron: "0 2 * * *"   # 07:00 Toshkent -> A guruh: Bugun + Kun maslahati
+    - cron: "30 2 * * *"  # 07:30 Toshkent -> B guruh: Ob-havo
+    - cron: "0 4 * * *"   # 09:00 Toshkent -> C guruh: Biznes
+    - cron: "0 5 * * *"   # 10:00 Toshkent -> D guruh: Kurslar + Dollar
+  workflow_dispatch:
+    inputs:
+      group:
+        description: "Qaysi guruh: all (hammasi), A, B, C yoki D"
+        default: "all"
 
 jobs:
   post:
@@ -18,8 +25,21 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      # Qaysi guruhni yuborishni aniqlash (cron yoki qo'lda)
+      - name: Guruhni aniqlash
+        id: grp
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 2 * * *")  echo "group=A" >> "$GITHUB_OUTPUT" ;;
+            "30 2 * * *") echo "group=B" >> "$GITHUB_OUTPUT" ;;
+            "0 4 * * *")  echo "group=C" >> "$GITHUB_OUTPUT" ;;
+            "0 5 * * *")  echo "group=D" >> "$GITHUB_OUTPUT" ;;
+            *)            echo "group=${{ github.event.inputs.group || 'all' }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - run: python daily_digest_bot.py
         env:
+          POST_GROUP: ${{ steps.grp.outputs.group }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
