@@ -1,11 +1,10 @@
 name: Kunlik digest post
 
 on:
-  schedule:
-    # Bitta "heartbeat": har 15 daqiqa, 07:00-22:59 Toshkent (UTC 2-17).
-    # Bot o'zi qaysi postni chiqarishni hal qiladi (vaqti kelgan kunliklar + tezkor xabar).
-    # Aniq vaqtli alohida cron'larga ishonmaymiz -> GitHub kechikishiga chidamli.
-    - cron: "*/15 2-17 * * *"
+  # Ishga tushirish TASHQI trigger (cron-job.org) orqali -> workflow_dispatch.
+  # GitHub'ning ichki cron'i ishonchsiz (kechikadi/o'tkazib yuboradi) bo'lgani uchun
+  # olib tashlandi. cron-job.org har 15 daqiqa AUTO rejimini chaqiradi; bot vaqtiga
+  # qarab kunlik postlar + tezkor xabarni o'zi hal qiladi.
   workflow_dispatch:
     inputs:
       group:
