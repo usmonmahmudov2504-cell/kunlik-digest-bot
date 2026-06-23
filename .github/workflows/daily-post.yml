@@ -2,24 +2,21 @@ name: Kunlik digest post
 
 on:
   schedule:
-    # Vaqtlar UTC'da. Toshkent = UTC+5.
-    # Daqiqalar ataylab yumaloq emas (:00/:30 emas): GitHub Actions cron'lari
-    # yumaloq vaqtlarda tiqilib soatlab kechikadi. "Toq" daqiqa kechikishni kamaytiradi.
-    - cron: "13 2 * * *"       # ~07:13 Toshkent -> A guruh: Bugun + Kun maslahati
-    - cron: "41 2 * * *"       # ~07:41 Toshkent -> B guruh: Ob-havo
-    - cron: "7 5 * * *"        # ~10:07 Toshkent -> D guruh: Kurslar + Dollar
-    - cron: "*/15 2-17 * * *"  # har 15 daq, 07:00-22:59 Toshkent -> C: tezkor biznes xabarlari
+    # Bitta "heartbeat": har 15 daqiqa, 07:00-22:59 Toshkent (UTC 2-17).
+    # Bot o'zi qaysi postni chiqarishni hal qiladi (vaqti kelgan kunliklar + tezkor xabar).
+    # Aniq vaqtli alohida cron'larga ishonmaymiz -> GitHub kechikishiga chidamli.
+    - cron: "*/15 2-17 * * *"
   workflow_dispatch:
     inputs:
       group:
-        description: "Qaysi guruh: all (hammasi), A, B, C yoki D"
+        description: "Qaysi guruh: all (hammasi), A, B, C, D yoki AUTO"
         default: "all"
 
 jobs:
   post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write          # tezkor xabar holatini (state/) repoga commit qilish uchun
+      contents: write          # tezkor/kunlik holatni (state/) repoga commit qilish uchun
     concurrency:
       group: digest-post       # ishlar bir-birining ustiga chiqmasin (holat to'qnashuvi yo'q)
       cancel-in-progress: false
@@ -32,17 +29,15 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      # Qaysi guruhni yuborishni aniqlash (cron yoki qo'lda)
-      - name: Guruhni aniqlash
+      # Qaysi rejim: jadval (heartbeat) -> AUTO; qo'lda -> tanlangan guruh
+      - name: Rejimni aniqlash
         id: grp
         run: |
-          case "${{ github.event.schedule }}" in
-            "13 2 * * *")      echo "group=A" >> "$GITHUB_OUTPUT" ;;
-            "41 2 * * *")      echo "group=B" >> "$GITHUB_OUTPUT" ;;
-            "7 5 * * *")       echo "group=D" >> "$GITHUB_OUTPUT" ;;
-            "*/15 2-17 * * *") echo "group=C" >> "$GITHUB_OUTPUT" ;;
-            *)                 echo "group=${{ github.event.inputs.group || 'all' }}" >> "$GITHUB_OUTPUT" ;;
-          esac
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "group=AUTO" >> "$GITHUB_OUTPUT"
+          else
+            echo "group=${{ github.event.inputs.group || 'all' }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - run: python daily_digest_bot.py
         env:
@@ -51,15 +46,15 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
 
-      # Tezkor xabar dedup holatini repoga saqlash (faqat o'zgargan bo'lsa)
+      # Holatni (tezkor dedup + kunlik belgilar) repoga saqlash (faqat o'zgargan bo'lsa)
       - name: Holatni saqlash
         if: always()
         run: |
-          if [ -n "$(git status --porcelain state/posted_news.json)" ]; then
+          if [ -n "$(git status --porcelain state/)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add state/posted_news.json
-            git commit -m "chore: tezkor xabar holati [skip ci]"
+            git add state/
+            git commit -m "chore: post holati [skip ci]"
             git push
           else
             echo "Holatda o'zgarish yo'q."

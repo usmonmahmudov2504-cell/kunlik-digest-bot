@@ -362,6 +362,27 @@ def save_posted(keys: list[str]) -> None:
         print("Holatni saqlashda xato:", e)
 
 
+# Kunlik postlar (A/B/D) qaysi sanada chiqarilganini saqlaydi (kuniga bir marta).
+_DAILY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "posted_daily.json")
+
+
+def load_daily() -> dict:
+    try:
+        with open(_DAILY_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_daily(state: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_DAILY_PATH), exist_ok=True)
+        with open(_DAILY_PATH, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=0)
+    except Exception as e:
+        print("Kunlik holatni saqlashda xato:", e)
+
+
 # ------------------------------------------------------------------ BUGUN (taqvim)
 SEASONS = {12: "Qish", 1: "Qish", 2: "Qish", 3: "Bahor", 4: "Bahor", 5: "Bahor",
            6: "Yoz", 7: "Yoz", 8: "Yoz", 9: "Kuz", 10: "Kuz", 11: "Kuz"}
@@ -677,14 +698,14 @@ NEWS_ACTIVE = (7, 23)
 def within_window(group: str, now) -> bool:
     """Run hozir post tashlashga ruxsat etilgan oynadami?
 
-    - A/B/D (jadval): GitHub kechikishi tunga cho'zilsa post chiqmasin.
-    - C (tezkor kuzatuvchi): faqat faol soatlarda (07-23) ishlasin.
+    - AUTO/C (heartbeat/kuzatuvchi): faqat faol soatlarda (07-23) ishlasin.
+    - A/B/D (qo'lda aniq guruh): GitHub kechikishi tunga cho'zilsa post chiqmasin.
     """
     if os.environ.get("FORCE_POST"):     # majburiy yuborish (qo'lda test uchun)
         return True
     if group == "ALL":                   # qo'lda ishga tushirish -> doim chiqsin
         return True
-    if group == "C":                     # tezkor kuzatuvchi -> faol-soat oynasi
+    if group in ("AUTO", "C"):           # heartbeat/tezkor -> faol-soat oynasi
         return NEWS_ACTIVE[0] <= now.hour < NEWS_ACTIVE[1]
     target = GROUP_TARGET_HOUR.get(group)
     if target is None:                   # noma'lum guruh -> to'smaymiz
@@ -693,30 +714,57 @@ def within_window(group: str, now) -> bool:
     return target <= cur <= target + MAX_DELAY_HOURS
 
 
+def daily_due(group: str, now, daily_state: dict) -> bool:
+    """AUTO rejimida: guruh bugun hali chiqmagan va vaqti kelganmi?
+
+    Mo'ljal vaqtidan keyin MAX_DELAY_HOURS ichida birinchi heartbeat post qiladi.
+    Bitta aniq cron o'rniga 15 daqiqalik urinishlar -> GitHub kechikishiga chidamli.
+    """
+    if daily_state.get(group) == now.strftime("%Y-%m-%d"):
+        return False                     # bugun allaqachon chiqarilgan
+    target = GROUP_TARGET_HOUR.get(group)
+    if target is None:
+        return False
+    cur = now.hour + now.minute / 60.0
+    return target <= cur <= target + MAX_DELAY_HOURS
+
+
 def main() -> None:
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
     date_label = f"{now.day}-{UZ_MONTHS[now.month]}, {now.year} \u00b7 {UZ_DAYS[now.weekday()]}"
     ch = str(TELEGRAM_CHANNEL)
 
-    # Qaysi guruh postlari yuboriladi (vaqt bo'yicha). Qo'lda ishga tushirsa -> ALL.
-    #   A = Bugun + Kun maslahati (07:00)
-    #   B = Ob-havo (07:30)
-    #   C = Tezkor biznes xabarlari (har 15 daqiqa, faqat yangilarini)
-    #   D = Kurslar + Dollar (10:00)
+    # POST_GROUP rejimlari:
+    #   AUTO = heartbeat (har 15 daq): vaqti kelgan kunlik postlar (A/B/D) + tezkor (C).
+    #          Aniq cron'ga ishonmaydi -> GitHub kechikishiga chidamli.
+    #   A = Bugun + Kun maslahati (~07:00) | B = Ob-havo (~07:30)
+    #   C = Tezkor biznes xabarlari       | D = Kurslar + Dollar (~10:00)
+    #   ALL = hammasi (qo'lda test)
     group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
 
-    # Darvoza: GitHub Actions juda kechikib ishga tushgan bo'lsa (masalan tunda),
-    # noto'g'ri vaqtda post chiqarmaymiz. Bu xato emas -> 0 bilan chiqamiz.
+    # Darvoza: faol oynadan tashqarida (masalan tunda) post tashlamaymiz. Xato emas -> exit 0.
     if not within_window(group, now):
         clock = f"{now.hour:02d}:{now.minute:02d}"
-        print(f"Guruh {group}: run mo'ljal oynasidan tashqarida (hozir {clock} "
+        print(f"Guruh {group}: faol oynadan tashqarida (hozir {clock} "
               f"Toshkent). Post tashlanmadi. Majburlash uchun FORCE_POST=1.")
         return
 
-    def want(g):
-        return group == "ALL" or group == g
+    today = now.strftime("%Y-%m-%d")
+    daily_state = load_daily() if group == "AUTO" else {}
+
+    if group == "AUTO":
+        # heartbeat: tezkor (C) doim, kunlik (A/B/D) faqat vaqti kelganda va bugun chiqmagan bo'lsa
+        due = {"C"} | {g for g in ("A", "B", "D") if daily_due(g, now, daily_state)}
+        print(f"AUTO (hozir {now.hour:02d}:{now.minute:02d}) -> chiqariladigan: {sorted(due)}")
+
+        def want(g):
+            return g in due
+    else:
+        def want(g):
+            return group == "ALL" or group == g
 
     results = []
+    done_today = []   # AUTO rejimida bugun chiqarilgan kunlik guruhlar
 
     # --- A guruh: Bugun + Kun maslahati ---
     if want("A"):
@@ -730,6 +778,7 @@ def main() -> None:
         results.append(safe_post(
             lambda: render_advice_card(date_label, tip["kind"], tip["text"], "p3.png", ch),
             advice_caption(date_label, tip), "Kun maslahati"))
+        done_today.append("A")
 
     # --- B guruh: Ob-havo ---
     if want("B"):
@@ -737,6 +786,7 @@ def main() -> None:
         results.append(safe_post(
             lambda: render_weather_card(date_label, weather, "p4.png", ch),
             weather_caption(date_label, weather), "Ob-havo"))
+        done_today.append("B")
 
     # --- C guruh: Tezkor biznes xabarlari (real-vaqt, faqat yangilarini) ---
     if want("C"):
@@ -770,6 +820,13 @@ def main() -> None:
         results.append(safe_post(
             lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch),
             currency_caption(date_label, cbu_text, banks), "Dollar"))
+        done_today.append("D")
+
+    # AUTO rejimida: bugun chiqarilgan kunlik guruhlarni belgilab qo'yamiz (qayta chiqmasin)
+    if group == "AUTO" and done_today:
+        for g in done_today:
+            daily_state[g] = today
+        save_daily(daily_state)
 
     ok = sum(results)
     print(f"\nGuruh: {group} | Natija: {ok}/{len(results)} post yuborildi.")
