@@ -611,59 +611,31 @@ def advice_caption(date_label, tip) -> str:
 
 
 def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
-    """Dollar kursi posti uchun elegant, tartibli caption (monospace jadval)."""
+    """Dollar posti caption: rasmiy kurs + eng yaxshi olish/sotish (to'liq jadval rasmda)."""
     extra_rates = extra_rates or []
     valid = [b for b in banks if b.get("buy") and b.get("sell")]
     best_sell = min(valid, key=lambda b: b["sell"], default=None)
     best_buy = max(valid, key=lambda b: b["buy"], default=None)
 
-    head = [f"\U0001F4B5 <b>Dollar kursi</b> \u2014 {date_label}", ""]
-    head.append(f"\U0001F3E6 Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
-    head.append("")
+    parts = [f"\U0001F4B5 <b>Dollar kursi</b> \u2014 {date_label}", ""]
+    parts.append(f"\U0001F3E6 Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
+    parts.append("")
     if best_buy and best_sell:
-        head.append("\U0001F7E2 <b>Sotmoqchilarga</b> \u2014 eng qimmat oladi:")
-        head.append(f"   {best_buy['bank']} \u00b7 <b>{best_buy['buy']:,}</b> so'm".replace(",", " "))
-        head.append("\U0001F535 <b>Olmoqchilarga</b> \u2014 eng arzon sotadi:")
-        head.append(f"   {best_sell['bank']} \u00b7 <b>{best_sell['sell']:,}</b> so'm".replace(",", " "))
-        head.append("")
-    head.append("\U0001F4CA <b>Banklar</b> (olish / sotish):")
-    head_text = "\n".join(head)
-
-    # Boshqa valyutalar (oxirida)
-    flags = {"EUR": "\U0001F1EA\U0001F1FA", "RUB": "\U0001F1F7\U0001F1FA",
-             "GBP": "\U0001F1EC\U0001F1E7", "KZT": "\U0001F1F0\U0001F1FF",
-             "CNY": "\U0001F1E8\U0001F1F3"}
-    tail = []
+        parts.append("\U0001F7E2 <b>Sotmoqchilarga</b> \u2014 eng qimmat oladigan bank:")
+        parts.append(f"   {best_buy['bank']} \u00b7 <b>{best_buy['buy']:,} so'm</b>".replace(",", " "))
+        parts.append("")
+        parts.append("\U0001F535 <b>Olmoqchilarga</b> \u2014 eng arzon sotadigan bank:")
+        parts.append(f"   {best_sell['bank']} \u00b7 <b>{best_sell['sell']:,} so'm</b>".replace(",", " "))
+        parts.append("")
     if extra_rates:
-        tail.append("")
-        tail.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy):")
+        flags = {"EUR": "\U0001F1EA\U0001F1FA", "RUB": "\U0001F1F7\U0001F1FA",
+                 "GBP": "\U0001F1EC\U0001F1E7", "KZT": "\U0001F1F0\U0001F1FF",
+                 "CNY": "\U0001F1E8\U0001F1F3"}
         pairs = [f"{flags.get(e['code'], '')} {e['code']} {e['rate']}" for e in extra_rates]
-        # ikkitadan qatorga
-        for i in range(0, len(pairs), 2):
-            tail.append("   ".join(pairs[i:i + 2]))
-    tail.append("")
-    tail.append("To'liq jadval rasmda \u2b06\ufe0f")
-    tail_text = "\n".join(tail)
-
-    # Monospace jadval (raqamlar ustun bo'lib tekislanadi)
-    NAME_W = 14
-    budget = 1024 - len(head_text) - len(tail_text) - len(_channel_footer()) - 30
-    rows, used = [], 0
-    for b in valid:
-        nm = html.escape(b["bank"][:NAME_W])
-        row = f"{nm:<{NAME_W}}{b['buy']:>6}{b['sell']:>7}"
-        block = "<pre>" + "\n".join(rows + [row]) + "</pre>"
-        if len(block) > budget:
-            break
-        rows.append(row)
-        used += 1
-    table = "<pre>" + "\n".join(rows) + "</pre>" if rows else ""
-    remainder = ""
-    if used < len(valid):
-        remainder = f"\n\u2022 <i>yana {len(valid) - used} ta bank \u2014 rasmda</i>"
-
-    text = head_text + "\n" + table + remainder + "\n" + tail_text
-    return _append_footer(text)
+        parts.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy): " + "   ".join(pairs[:3]))
+        parts.append("")
+    parts.append("\U0001F4CA To'liq banklar jadvali \u2014 rasmda \u2b06\ufe0f")
+    return _finish(parts)
 
 
 # ------------------------------------------------------------------ TELEGRAM

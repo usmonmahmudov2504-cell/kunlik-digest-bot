@@ -450,91 +450,85 @@ def render_currency_overview_card(date_label, rows, out_path="rates.png", channe
 # ============================================================ 5) DOLLAR (BANKLAR)
 def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png",
                          channel_label="", extra_rates=None, usd_value=None, prev_usd=None):
-    W, pad, row_h, callout_h = 900, 40, 54, 150
-    H = pad + 96 + 40 + 50 + callout_h + 24 + 56 + len(banks) * row_h + 120 + 50
+    W, pad, row_h, hero_h = 900, 40, 46, 116
+    nrows = (len(banks) + 1) // 2          # banklar 2 ustunga bo'linadi -> rasm ixcham
+    H = pad + 96 + 40 + hero_h + 22 + 40 + 42 + nrows * row_h + 16 + 68 + 72
     img, d = _new(W, H)
-    _header(img, W, pad, "Dollar kursi", date_label, ACCENT, "currency")
-    f_hs, f_row, f_rowb = R(22), R(27), B(27)
-    f_lbl, f_big, f_sub, f_tiny, f_chg = R(23), B(44), R(21), R(17), B(21)
+    _header(img, W, pad, "Markaziy bank", date_label, ACCENT, "currency")
+    f_hs = R(22)
     y = pad + 96 + 40
 
-    _rrect(d, (pad, y, W - pad, y + 48), 12, CARD2)
-    fl = _flag("USD", 26)
-    lbl_x = pad + 20
+    # Hero: rasmiy USD kursi (katta) + kunlik o'zgarish
+    _panel(img, (pad, y, W - pad, y + hero_h), 16, CARD)
+    fl = _flag("USD", 30)
+    lx = pad + 28
     if fl:
-        img.paste(fl, (pad + 20, y + 11), fl)
-        lbl_x = pad + 20 + fl.width + 12
-    d.text((lbl_x, y + 11), "Markaziy bank (rasmiy)", font=f_hs, fill=MUTED)
-    tw = d.textlength(cbu_rate, font=f_rowb)
-    rx = W - pad - 20 - tw
-    d.text((rx, y + 9), cbu_rate, font=f_rowb, fill=TEXT)
-    # kunlik o'zgarish (rasmiy USD)
+        img.paste(fl, (pad + 28, y + 26), fl)
+        lx = pad + 28 + fl.width + 18
+    d.text((lx, y + 24), "Rasmiy kurs", font=B(26), fill=TEXT)
+    d.text((lx, y + 60), "Markaziy bank \u00b7 1 USD", font=R(22), fill=MUTED)
+    rate_font = B(48)
+    rw = d.textlength(cbu_rate, font=rate_font)
+    rx = W - pad - 30 - rw
+    d.text((rx, y + 26), cbu_rate, font=rate_font, fill=TEXT)
     if usd_value is not None and prev_usd is not None and abs(usd_value - prev_usd) >= 0.005:
         delta = usd_value - prev_usd
         up = delta > 0
         col = GREEN if up else RED
-        txt = _fmt_delta(delta)
-        ctw = d.textlength(txt, font=f_chg)
-        cx = rx - ctw - 26
-        t = y + 24
+        txt = _fmt_delta(delta) + " so'm"
+        cf = B(22)
+        cw2 = d.textlength(txt, font=cf)
+        tx = W - pad - 30 - cw2
+        ty = y + 78
+        tri = 13
+        bx = tx - tri - 10
         if up:
-            d.polygon([(cx, t + 6), (cx + 13, t + 6), (cx + 6.5, t - 6)], fill=col)
+            d.polygon([(bx, ty + 16), (bx + tri, ty + 16), (bx + tri / 2, ty + 3)], fill=col)
         else:
-            d.polygon([(cx, t - 6), (cx + 13, t - 6), (cx + 6.5, t + 6)], fill=col)
-        d.text((cx + 20, y + 12), txt, font=f_chg, fill=col)
-    y += 50 + 14
+            d.polygon([(bx, ty + 5), (bx + tri, ty + 5), (bx + tri / 2, ty + 18)], fill=col)
+        d.text((tx, ty), txt, font=cf, fill=col)
+    y += hero_h + 22
 
     valid = [b for b in banks if b.get("sell") and b.get("buy")]
     max_buy = max((b["buy"] for b in valid), default=None)
     min_sell = min((b["sell"] for b in valid), default=None)
-    best_buy_bank = next((b["bank"] for b in valid if b["buy"] == max_buy), "")
-    best_sell_bank = next((b["bank"] for b in valid if b["sell"] == min_sell), "")
 
-    gap = 20
-    cw = (W - 2 * pad - gap) // 2
-    cy = y
-    _panel(img, (pad, cy, pad + cw, cy + callout_h), 16, CARD, blur=14, dy=6, alpha=100)
-    d.rounded_rectangle((pad, cy, pad + 9, cy + callout_h), radius=4, fill=GREEN)
-    d.text((pad + 28, cy + 20), "Dollar SOTMOQCHIMISIZ?", font=f_lbl, fill=TEXT)
-    d.text((pad + 28, cy + 54), fmt(max_buy) + " so'm", font=f_big, fill=GREEN)
-    d.text((pad + 28, cy + 110), f"{best_buy_bank} \u2014 eng qimmat oladi", font=f_sub, fill=MUTED)
-    x2 = pad + cw + gap
-    _panel(img, (x2, cy, x2 + cw, cy + callout_h), 16, CARD, blur=14, dy=6, alpha=100)
-    d.rounded_rectangle((x2, cy, x2 + 9, cy + callout_h), radius=4, fill=ACCENT)
-    d.text((x2 + 28, cy + 20), "Dollar OLMOQCHIMISIZ?", font=f_lbl, fill=TEXT)
-    d.text((x2 + 28, cy + 54), fmt(min_sell) + " so'm", font=f_big, fill=ACCENT)
-    d.text((x2 + 28, cy + 110), f"{best_sell_bank} \u2014 eng arzon sotadi", font=f_sub, fill=MUTED)
-    y = cy + callout_h + 24
+    d.text((pad + 4, y), "Tijorat banklarida \u2014 olish / sotish", font=R(23), fill=MUTED)
+    y += 40
 
-    c_bank, c_buy, c_sell = pad + 20, pad + 430, pad + 650
-    d.text((c_bank, y), "Bank", font=f_hs, fill=MUTED)
-    d.text((c_buy, y), "Olish", font=f_hs, fill=GREEN)
-    d.text((c_sell, y), "Sotish", font=f_hs, fill=ACCENT)
-    y += 28
-    d.text((c_buy, y), "(siz sotasiz)", font=f_tiny, fill=MUTED)
-    d.text((c_sell, y), "(siz olasiz)", font=f_tiny, fill=MUTED)
-    y += 26
+    # Banklar jadvali \u2014 2 ustun (ixcham). Yashil = max olish, ko'k = min sotish.
+    colw = (W - 2 * pad - 24) // 2
+    cols_x = [pad, pad + colw + 24]
+    for cx in cols_x:
+        d.text((cx + 14, y), "Bank", font=f_hs, fill=MUTED)
+        d.text((cx + colw - 120 - d.textlength("Olish", font=f_hs), y), "Olish", font=f_hs, fill=GREEN)
+        d.text((cx + colw - 14 - d.textlength("Sotish", font=f_hs), y), "Sotish", font=f_hs, fill=ACCENT)
+    y += 34
     d.line((pad, y, W - pad, y), fill=DIVIDER, width=2)
     y += 8
-
-    for b in banks:
+    table_top = y
+    f_n, f_nb = R(23), B(23)
+    for i, b in enumerate(banks):
+        cx = cols_x[i // nrows]
+        ry = table_top + (i % nrows) * row_h
         is_bb = b.get("buy") == max_buy
         is_bs = b.get("sell") == min_sell
         if is_bb or is_bs:
-            _rrect(d, (pad, y, W - pad, y + row_h - 8), 10, CARD)
-        d.text((c_bank, y + 10), b["bank"], font=f_row, fill=TEXT)
-        d.text((c_buy, y + 10), fmt(b.get("buy")), font=(f_rowb if is_bb else f_row),
-               fill=(GREEN if is_bb else TEXT))
-        d.text((c_sell, y + 10), fmt(b.get("sell")), font=(f_rowb if is_bs else f_row),
-               fill=(ACCENT if is_bs else TEXT))
-        y += row_h
-
-    y += 14
+            _rrect(d, (cx, ry - 1, cx + colw, ry + row_h - 6), 9, CARD)
+        d.text((cx + 14, ry + 6), _ellipsize(d, b["bank"], f_n, colw - 200), font=f_n, fill=TEXT)
+        buy_s, sell_s = fmt(b.get("buy")), fmt(b.get("sell"))
+        fb = f_nb if is_bb else f_n
+        fs = f_nb if is_bs else f_n
+        d.text((cx + colw - 120 - d.textlength(buy_s, font=fb), ry + 6), buy_s,
+               font=fb, fill=(GREEN if is_bb else TEXT))
+        d.text((cx + colw - 14 - d.textlength(sell_s, font=fs), ry + 6), sell_s,
+               font=fs, fill=(ACCENT if is_bs else TEXT))
+    y = table_top + nrows * row_h + 16
     d.ellipse((pad + 2, y + 6, pad + 18, y + 22), fill=GREEN)
-    d.text((pad + 28, y), "eng qimmat oladi \u2014 dollaringizni shu yerda soting", font=f_hs, fill=MUTED)
+    d.text((pad + 28, y), "yashil \u2014 eng qimmat oladi (sotish uchun qulay)", font=f_hs, fill=MUTED)
     y += 34
     d.ellipse((pad + 2, y + 6, pad + 18, y + 22), fill=ACCENT)
-    d.text((pad + 28, y), "eng arzon sotadi \u2014 dollarni shu yerdan oling", font=f_hs, fill=MUTED)
+    d.text((pad + 28, y), "ko\u2018k \u2014 eng arzon sotadi (olish uchun qulay)", font=f_hs, fill=MUTED)
 
     _footer(d, W, H, pad, channel_label, "Manba: cbu.uz, goldenpages.uz")
     img.save(out_path)
