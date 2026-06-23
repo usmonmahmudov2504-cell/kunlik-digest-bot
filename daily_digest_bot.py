@@ -126,7 +126,8 @@ def _ccy_row(it: dict) -> dict:
     rate = float(it["Rate"])
     nominal = str(it.get("Nominal", "1")).strip() or "1"
     unit = f"{nominal} {code}" if nominal != "1" else f"1 {code}"
-    return {"code": code, "name": CCY_NAMES.get(code, code), "unit": unit, "rate": _fmt_sum(rate)}
+    return {"code": code, "name": CCY_NAMES.get(code, code), "unit": unit,
+            "rate": _fmt_sum(rate), "value": rate}
 
 
 def get_cbu_rates() -> tuple[str, list[dict], list[dict]]:
@@ -381,6 +382,27 @@ def save_daily(state: dict) -> None:
             json.dump(state, f, ensure_ascii=False, indent=0)
     except Exception as e:
         print("Kunlik holatni saqlashda xato:", e)
+
+
+# Oldingi (kechagi) rasmiy kurslar -> kunlik o'zgarishni (▲/▼) hisoblash uchun.
+_RATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "prev_rates.json")
+
+
+def load_prev_rates() -> dict:
+    try:
+        with open(_RATES_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_prev_rates(rates: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_RATES_PATH), exist_ok=True)
+        with open(_RATES_PATH, "w", encoding="utf-8") as f:
+            json.dump(rates, f, ensure_ascii=False, indent=0)
+    except Exception as e:
+        print("Kurs holatini saqlashda xato:", e)
 
 
 # ------------------------------------------------------------------ BUGUN (taqvim)
@@ -814,12 +836,20 @@ def main() -> None:
     if want("D"):
         cbu_text, overview, _ = get_cbu_rates()
         banks = get_bank_rates()
+        prev_rates = load_prev_rates()                 # kechagi kurslar (o'zgarish uchun)
+        prev_usd = prev_rates.get("USD")
+        usd_value = next((r["value"] for r in overview if r["code"] == "USD"), None)
+        ok_rates = safe_post(
+            lambda: render_currency_overview_card(date_label, overview, "p5.png", ch, prev_rates),
+            currency_overview_caption(date_label, overview), "Kurslar")
+        results.append(ok_rates)
         results.append(safe_post(
-            lambda: render_currency_overview_card(date_label, overview, "p5.png", ch),
-            currency_overview_caption(date_label, overview), "Kurslar"))
-        results.append(safe_post(
-            lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch),
+            lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch,
+                                         usd_value=usd_value, prev_usd=prev_usd),
             currency_caption(date_label, cbu_text, banks), "Dollar"))
+        # bugungi kurslarni keyingi kun uchun saqlaymiz (kurslar posti chiqqan bo'lsa)
+        if ok_rates:
+            save_prev_rates({r["code"]: r["value"] for r in overview})
         done_today.append("D")
 
     # AUTO rejimida: bugun chiqarilgan kunlik guruhlarni belgilab qo'yamiz (qayta chiqmasin)

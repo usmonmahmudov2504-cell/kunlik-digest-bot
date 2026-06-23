@@ -29,11 +29,45 @@ GREEN  = (52, 211, 153)
 GOLD   = (251, 191, 36)
 PURPLE = (167, 139, 250)
 TEAL   = (45, 212, 191)
+RED    = (248, 113, 113)      # kurs pasayishi (o'zgarish ko'rsatkichi)
 DIVIDER = (51, 65, 85)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_DIRS = [os.path.join(HERE, "fonts"), "/usr/share/fonts/truetype/dejavu", r"C:\Windows\Fonts"]
 INTER_FILE = "Inter-Variable.ttf"   # zamonaviy variable shrift (matn uchun)
+FLAG_DIR = os.path.join(HERE, "assets", "flags")   # valyuta bayroqlari (USD.png, EUR.png ...)
+_flag_cache: dict = {}
+
+
+def _flag(code, h):
+    """Valyuta bayrog'ini (PNG) balandlik bo'yicha o'lchab qaytaradi. Yo'q bo'lsa None."""
+    key = (code, h)
+    if key in _flag_cache:
+        return _flag_cache[key]
+    img = None
+    p = os.path.join(FLAG_DIR, f"{code}.png")
+    if os.path.exists(p):
+        try:
+            f = Image.open(p).convert("RGBA")
+            w = max(1, round(f.width * h / f.height))
+            img = f.resize((w, h))
+        except Exception:
+            img = None
+    _flag_cache[key] = img
+    return img
+
+
+def _fmt_delta(delta):
+    return f"{abs(delta):,.2f}".replace(",", " ").replace(".", ",")
+
+
+def _ellipsize(d, text, font, max_w):
+    """Matn max_w ga sig'masa, oxiriga "…" qo'yib qisqartiradi."""
+    if d.textlength(text, font=font) <= max_w:
+        return text
+    while text and d.textlength(text + "…", font=font) > max_w:
+        text = text[:-1]
+    return text + "…"
 
 
 def _font(name, size):
@@ -358,23 +392,55 @@ def render_weather_card(date_label, weather, out_path="weather.png", channel_lab
 
 
 # ============================================================ 4) UMUMIY KURSLAR
-def render_currency_overview_card(date_label, rows, out_path="rates.png", channel_label=""):
-    """rows: [{"code","name","unit","rate"}, ...] (USD birinchi)."""
-    W, pad, row_h = 900, 40, 60
+def render_currency_overview_card(date_label, rows, out_path="rates.png", channel_label="", prev=None):
+    """rows: [{"code","name","unit","rate","value"}, ...] (USD birinchi).
+
+    prev: {code: oldingi_qiymat} -> kunlik o'zgarish (▲ yashil / ▼ qizil) ko'rsatiladi.
+    """
+    prev = prev or {}
+    W, pad, row_h = 900, 40, 66
     H = pad + 96 + 40 + 44 + len(rows) * row_h + 60
     img, d = _new(W, H)
     _header(img, W, pad, "Kurslar", date_label, GREEN, "rates")
     y = pad + 96 + 40
     d.text((pad + 4, y), "Markaziy bank rasmiy kursi (1 birlik uchun)", font=R(22), fill=MUTED)
     y += 44
-    f_code, f_name, f_rate = B(30), R(24), B(30)
+    f_code, f_name, f_rate, f_chg = B(30), R(23), B(29), B(21)
+    chg_right = W - pad - 22
+    rate_right = chg_right - 150
     for r in rows:
-        _rrect(d, (pad, y, W - pad, y + row_h - 8), 12, CARD)
-        d.text((pad + 20, y + 12), r["code"], font=f_code, fill=ACCENT)
-        d.text((pad + 130, y + 15), f"{r['name']}  ({r['unit']})", font=f_name, fill=MUTED)
+        _panel(img, (pad, y, W - pad, y + row_h - 8), 12, CARD, blur=10, dy=4, alpha=80)
+        cy = y + (row_h - 8) // 2
+        # bayroq
+        fl = _flag(r["code"], 28)
+        if fl:
+            img.paste(fl, (pad + 20, cy - fl.height // 2), fl)
+        d.text((pad + 80, cy - 18), r["code"], font=f_code, fill=ACCENT)
+        # kurs (avval o'lchaymiz -> nomni qolgan joyga moslaymiz)
         rate_s = f"{r['rate']} so'm"
-        tw = d.textlength(rate_s, font=f_rate)
-        d.text((W - pad - 20 - tw, y + 12), rate_s, font=f_rate, fill=TEXT)
+        rw = d.textlength(rate_s, font=f_rate)
+        name = _ellipsize(d, f"{r['name']}  ({r['unit']})", f_name, rate_right - rw - (pad + 160) - 20)
+        d.text((pad + 160, cy - 13), name, font=f_name, fill=MUTED)
+        d.text((rate_right - rw, cy - 17), rate_s, font=f_rate, fill=TEXT)
+        # kunlik o'zgarish: vektor uchburchak + farq (tofu xavfi yo'q)
+        val = r.get("value")
+        delta = (val - prev[r["code"]]) if (val is not None and r["code"] in prev) else None
+        if delta is None or abs(delta) < 0.005:
+            d.text((chg_right - d.textlength("—", font=f_chg), cy - 13), "—",
+                   font=f_chg, fill=MUTED)
+        else:
+            up = delta > 0
+            col = GREEN if up else RED
+            txt = _fmt_delta(delta)
+            tw = d.textlength(txt, font=f_chg)
+            tri = 14
+            xs = chg_right - tw - tri - 8
+            t = cy - 2
+            if up:
+                d.polygon([(xs, t + 6), (xs + tri, t + 6), (xs + tri / 2, t - 7)], fill=col)
+            else:
+                d.polygon([(xs, t - 6), (xs + tri, t - 6), (xs + tri / 2, t + 7)], fill=col)
+            d.text((chg_right - tw, cy - 13), txt, font=f_chg, fill=col)
         y += row_h
     _footer(d, W, H, pad, channel_label, "Manba: cbu.uz")
     img.save(out_path)
@@ -383,19 +449,39 @@ def render_currency_overview_card(date_label, rows, out_path="rates.png", channe
 
 # ============================================================ 5) DOLLAR (BANKLAR)
 def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png",
-                         channel_label="", extra_rates=None):
+                         channel_label="", extra_rates=None, usd_value=None, prev_usd=None):
     W, pad, row_h, callout_h = 900, 40, 54, 150
     H = pad + 96 + 40 + 50 + callout_h + 24 + 56 + len(banks) * row_h + 120 + 50
     img, d = _new(W, H)
     _header(img, W, pad, "Dollar kursi", date_label, ACCENT, "currency")
     f_hs, f_row, f_rowb = R(22), R(27), B(27)
-    f_lbl, f_big, f_sub, f_tiny = R(23), B(44), R(21), R(17)
+    f_lbl, f_big, f_sub, f_tiny, f_chg = R(23), B(44), R(21), R(17), B(21)
     y = pad + 96 + 40
 
     _rrect(d, (pad, y, W - pad, y + 48), 12, CARD2)
-    d.text((pad + 20, y + 11), "Markaziy bank (rasmiy)", font=f_hs, fill=MUTED)
+    fl = _flag("USD", 26)
+    lbl_x = pad + 20
+    if fl:
+        img.paste(fl, (pad + 20, y + 11), fl)
+        lbl_x = pad + 20 + fl.width + 12
+    d.text((lbl_x, y + 11), "Markaziy bank (rasmiy)", font=f_hs, fill=MUTED)
     tw = d.textlength(cbu_rate, font=f_rowb)
-    d.text((W - pad - 20 - tw, y + 9), cbu_rate, font=f_rowb, fill=TEXT)
+    rx = W - pad - 20 - tw
+    d.text((rx, y + 9), cbu_rate, font=f_rowb, fill=TEXT)
+    # kunlik o'zgarish (rasmiy USD)
+    if usd_value is not None and prev_usd is not None and abs(usd_value - prev_usd) >= 0.005:
+        delta = usd_value - prev_usd
+        up = delta > 0
+        col = GREEN if up else RED
+        txt = _fmt_delta(delta)
+        ctw = d.textlength(txt, font=f_chg)
+        cx = rx - ctw - 26
+        t = y + 24
+        if up:
+            d.polygon([(cx, t + 6), (cx + 13, t + 6), (cx + 6.5, t - 6)], fill=col)
+        else:
+            d.polygon([(cx, t - 6), (cx + 13, t - 6), (cx + 6.5, t + 6)], fill=col)
+        d.text((cx + 20, y + 12), txt, font=f_chg, fill=col)
     y += 50 + 14
 
     valid = [b for b in banks if b.get("sell") and b.get("buy")]
