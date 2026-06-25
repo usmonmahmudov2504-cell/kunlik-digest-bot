@@ -903,18 +903,20 @@ def post_photo(image_path: str, caption: str, reply_markup=None) -> None:
             resp2.raise_for_status()
 
 
-def post_message(text: str, reply_markup=None) -> None:
-    """Rasmsiz matnli post (sendMessage) -- og:image topilmagan tezkor xabar uchun."""
+def post_message(text: str, reply_markup=None, link_preview=None) -> None:
+    """Matnli post (sendMessage). link_preview -> havola preview/Instant View kartasi."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     data = {"chat_id": TELEGRAM_CHANNEL, "text": text, "parse_mode": "HTML"}
     if reply_markup:
         data["reply_markup"] = json.dumps(reply_markup)
+    if link_preview is not None:
+        data["link_preview_options"] = json.dumps(link_preview)
     resp = requests.post(url, data=data, timeout=30)
     if not resp.ok:
         print(f"  Telegram {resp.status_code}: {resp.text}")
         data2 = {"chat_id": TELEGRAM_CHANNEL, "text": re.sub(r"<[^>]+>", "", text)}
-        if reply_markup:
-            data2["reply_markup"] = json.dumps(reply_markup)
+        if link_preview is not None:
+            data2["link_preview_options"] = json.dumps(link_preview)
         resp2 = requests.post(url, data=data2, timeout=30)
         if not resp2.ok:
             print(f"  Qayta urinish ham xato {resp2.status_code}: {resp2.text}")
@@ -927,16 +929,22 @@ def post_breaking(item) -> bool:
     og:image topilsa -> rasm bilan; topilmasa -> matnli post (sendMessage).
     """
     try:
-        caption = breaking_caption(item)
+        title = item["title"] if isinstance(item, dict) else item
         link = item.get("link") if isinstance(item, dict) else None
-        # Instant View sahifasi (telegra.ph) -> ilovadan chiqmasdan to'liq o'qish.
+        # Instant View sahifasi (telegra.ph). Havola matn ichida -> Telegram
+        # ixcham preview karta + "\u26a1 INSTANT VIEW" tugmasini o'zi qo'shadi.
         iv_url = make_instant_view(item)
-        button = _read_more_button(iv_url or link)
-        img = fetch_news_image([item], "news_banner.png")
-        if img:
-            post_photo(img, caption, reply_markup=button)
+        preview_url = iv_url or link
+        parts = ["\u26a1 <b>Tezkor xabar</b>", ""]
+        if preview_url:
+            parts.append(f'<a href="{preview_url}"><b>{html.escape(title)}</b></a>')
         else:
-            post_message(caption, reply_markup=button)
+            parts.append(f"<b>{html.escape(title)}</b>")
+        parts.append("")
+        parts.append(_tags("news"))
+        text = _finish(parts)
+        lpo = {"url": preview_url, "show_above_text": False} if preview_url else {"is_disabled": True}
+        post_message(text, link_preview=lpo)
         print("Tezkor xabar \u2713")
         return True
     except Exception as e:
