@@ -363,32 +363,77 @@ BIZ_KW = ["biznes", "iqtisod", "iqtisodiy", "soliq", "valyuta", "eksport", "impo
           "lizing", "soliqlar", "byudjetdan", "tovar", "narxlar", "tender"]
 
 
-def get_business_news(limit: int = 5) -> list[dict]:
-    """Biznes sarlavhalarini {"title","link"} ko'rinishida qaytaradi.
+# Futbol uchun kalit so'zlar (o'zbek/rus/ingliz) -- umumiy feeddan futbolni ajratish.
+FOOTBALL_KW = ["futbol", "футбол", "liga", "лига", "chempion", "чемпион", "messi", "месси",
+               "ronaldo", "роналду", "terma jamoa", "сборная", "uefa", "уефа", "fifa", "фифа",
+               "transfer", "трансфер", "barcelona", "барселона", "real madrid", "реал",
+               "gol ", "гол", "match", "матч", "stadion", "стадион", "superliga", "суперлига",
+               "afc", "premier", "лига чемпионов", "mancheste", "ливерпуль", "bayern", "psg"]
 
-    link -- maqola manzili; undan keyinroq banner rasmi (og:image) olinadi.
+# Futbol manbalari: championat.com (jahon, RUS, ishonchli) + O'zbek umumiy (filtr bilan).
+FOOTBALL_FEEDS = [
+    ("https://www.championat.com/rss/news/football/", True),   # butun feed futbol
+    ("https://www.gazeta.uz/uz/rss/", False),                  # O'zbek -> futbolni filtrlaymiz
+    ("https://kun.uz/uz/rss", False),
+    ("https://daryo.uz/rss/sport", False),
+]
+
+# Yangilik "presetlari" -> kanal config'da news_preset bilan tanlanadi.
+NEWS_PRESETS = {
+    "business": {"feeds": BUSINESS_FEEDS, "keywords": BIZ_KW},
+    "football": {"feeds": FOOTBALL_FEEDS, "keywords": FOOTBALL_KW},
+}
+
+
+def get_news(feeds, keywords, limit: int = 5) -> list[dict]:
+    """Berilgan feed'lar va kalit so'zlardan yangiliklarni {"title","link"} qaytaradi.
+
+    feeds: [(url, butun_feed_mosmi), ...]. Mos kelganlar oldinga, qolgani to'ldiruvchi.
     """
-    biz, other, seen = [], [], set()
-    for url, all_biz in BUSINESS_FEEDS:
+    hit, other, seen = [], [], set()
+    for url, all_relevant in feeds:
         try:
-            parsed = feedparser.parse(url)
+            parsed = feedparser.parse(url, agent=UA_WEB["User-Agent"])
         except Exception as e:
-            print(f"Biznes RSS xato ({url}): {e}")
+            print(f"RSS xato ({url}): {e}")
             continue
         for e in parsed.entries[:15]:
-            title = (e.get("title") or "").strip()
+            title = html.unescape((e.get("title") or "").strip())
             if not title or title in seen:
                 continue
             seen.add(title)
             item = {"title": title, "link": e.get("link", "")}
-            if all_biz or any(k in title.lower() for k in BIZ_KW):
-                biz.append(item)
+            if all_relevant or any(k in title.lower() for k in keywords):
+                hit.append(item)
             else:
                 other.append(item)
-    result = biz[:limit]
+    result = hit[:limit]
     if len(result) < limit:                # yetmasa, umumiy bilan to'ldiramiz
         result += other[: limit - len(result)]
     return result
+
+
+def get_business_news(limit: int = 5) -> list[dict]:
+    """Biznes sarlavhalari (orqaga moslik uchun -- get_news ustiga o'ralgan)."""
+    return get_news(BUSINESS_FEEDS, BIZ_KW, limit)
+
+
+def translate_to_uz(text: str) -> str:
+    """Sarlavhani tabiiy O'zbek (lotin) tiliga tarjima qiladi. Claude bo'lmasa o'zicha qoladi."""
+    if not text or client is None:
+        return text
+    try:
+        resp = client.messages.create(
+            model="claude-sonnet-4-6", max_tokens=200,
+            messages=[{"role": "user", "content":
+                       "Quyidagi sport/futbol yangiligi sarlavhasini tabiiy, jonli O'zbek "
+                       "tiliga (lotin alifbosida) tarjima qil. Faqat tarjimani qaytar, "
+                       f"izoh va qo'shtirnoqsiz:\n\n{text}"}])
+        t = "".join(b.text for b in resp.content if b.type == "text").strip()
+        return t.strip('"«»') or text
+    except Exception as e:
+        print("Tarjima xato:", e)
+        return text
 
 
 def _og_image_url(article_url: str) -> str | None:
@@ -918,13 +963,15 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
             resp2.raise_for_status()
 
 
-def post_breaking(item) -> bool:
-    """Tezkor xabar: maqola surati (rasm ichida matnsiz) + caption + 'To'liq o'qish' tugma.
+def post_breaking(item, translate=None) -> bool:
+    """Tezkor xabar: ixcham matn + Instant View preview karta.
 
-    og:image topilsa -> rasm bilan; topilmasa -> matnli post (sendMessage).
+    translate="uz" -> sarlavha O'zbekchaga tarjima qilinadi (ruscha manbalar uchun).
     """
     try:
         title = item["title"] if isinstance(item, dict) else item
+        if translate == "uz":                 # ruscha/boshqa -> O'zbekcha sarlavha
+            title = translate_to_uz(title)
         link = item.get("link") if isinstance(item, dict) else None
         # Instant View sahifasi (telegra.ph). Havola matn ichida -> Telegram
         # ixcham preview karta + "\u26a1 INSTANT VIEW" tugmasini o'zi qo'shadi.
@@ -1089,17 +1136,21 @@ def run_channel(now, date_label, group, cfg) -> list:
         done_today.append("B")
 
     # --- C guruh: Tezkor xabarlar (real-vaqt, faqat yangilarini) ---
-    # Faqat maqola surati + caption (rasm ichida matn yo'q) + "To'liq o'qish" tugmasi.
+    # Manba kanal config'idan: news_preset (business/football) yoki news_feeds/keywords.
     if want("C"):
-        business = get_business_news(limit=10)
+        preset = NEWS_PRESETS.get(cfg.get("news_preset", "business"), NEWS_PRESETS["business"])
+        feeds = cfg.get("news_feeds", preset["feeds"])
+        kw = cfg.get("news_keywords", preset["keywords"])
+        translate = cfg.get("translate")      # masalan "uz" -> ruscha sarlavhani tarjima
+        news = get_news(feeds, kw, limit=10)
         posted = load_posted()
         seen = set(posted)
-        fresh = [it for it in business if _news_key(it) and _news_key(it) not in seen]
+        fresh = [it for it in news if _news_key(it) and _news_key(it) not in seen]
         fresh = fresh[:MAX_ALERTS]
         if not fresh:
             print("Yangi xabar yo'q (takror oldini olindi).")
         for it in fresh:
-            ok = post_breaking(it)
+            ok = post_breaking(it, translate=translate)
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
