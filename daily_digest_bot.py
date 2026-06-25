@@ -38,6 +38,7 @@ from render_card import (
     render_day_card, render_news_card, render_weather_card,
     render_currency_overview_card, render_currency_card, render_advice_card,
     render_market_card, render_fixtures_card, render_results_card, render_standings_card,
+    render_goal_card,
 )
 
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
@@ -1457,7 +1458,8 @@ def run_channel(now, date_label, group, cfg) -> list:
             # birinchi ko'rishda jim (mavjud hisobni e'lon qilmaymiz); keyin gol bo'lsa post
             if old is not None and cur_sum > old.get("sum", 0):
                 try:
-                    post_message(goal_caption(m))
+                    img = render_goal_card(m, "p11.png", ch)
+                    post_photo(img, goal_caption(m))
                     print(f"GOOOL ✓ {m['home']} {m['hs']}-{m['as']} {m['away']}")
                     results.append(True)
                 except Exception as e:

@@ -806,6 +806,66 @@ def render_standings_card(date_label, groups, out_path="standings.png", channel_
     return out_path
 
 
+# ============================================================ 9) GOOOL (real-vaqt)
+def render_goal_card(m, out_path="goal.png", channel_label=""):
+    """Gol grafikasi: ko'k fon, stadion nuri, to'p, katta GOOOL + hisob."""
+    W, H, pad = 900, 600, 40
+    top, bot = (33, 96, 240), (16, 36, 108)
+    col = Image.new("RGB", (1, H))
+    px = col.load()
+    for y in range(H):
+        t = y / (H - 1)
+        px[0, y] = (round(top[0] + (bot[0] - top[0]) * t), round(top[1] + (bot[1] - top[1]) * t),
+                    round(top[2] + (bot[2] - top[2]) * t))
+    img = col.resize((W, H))
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    for gx in (155, W - 155):
+        gd.ellipse((gx - 140, -130, gx + 140, 120), fill=(255, 255, 255, 85))
+    glow = glow.filter(ImageFilter.GaussianBlur(55))
+    img.paste(glow, (0, 0), glow)
+    d = ImageDraw.Draw(img)
+    # katta to'p
+    bs = 130
+    _draw_icon(d, "ball", (W // 2 - bs // 2, 56, W // 2 + bs // 2, 56 + bs), (255, 255, 255))
+    # GOOOL
+    gf = B(120)
+    txt = "GOOOL"
+    tw = d.textlength(txt, font=gf)
+    d.text((W // 2 - tw / 2, 222), txt, font=gf, fill=(255, 255, 255),
+           stroke_width=5, stroke_fill=(14, 30, 86))
+    # hisob qatori (markazlashgan): [bayroq] Uy  H : M  Mehmon [bayroq]
+    nf, sf = B(36), B(58)
+    hn, an = _tname(m.get("home"), 15), _tname(m.get("away"), 15)
+    score = f"{m.get('hs', 0)}  :  {m.get('as', 0)}"
+    hb, ab = _badge(m.get("hb"), 46), _badge(m.get("ab"), 46)
+    GAP = 18
+    hw, aw, sw = d.textlength(hn, font=nf), d.textlength(an, font=nf), d.textlength(score, font=sf)
+    total = (hb.width + GAP if hb else 0) + hw + GAP + sw + GAP + aw + (GAP + ab.width if ab else 0)
+    x = (W - total) / 2
+    yr = 410
+    cyr = yr + 26
+    if hb:
+        img.paste(hb, (int(x), cyr - hb.height // 2), hb)
+        x += hb.width + GAP
+    d.text((x, yr + 12), hn, font=nf, fill=(236, 242, 255))
+    x += hw + GAP
+    d.text((x, yr), score, font=sf, fill=(255, 255, 255))
+    x += sw + GAP
+    d.text((x, yr + 12), an, font=nf, fill=(236, 242, 255))
+    x += aw + GAP
+    if ab:
+        img.paste(ab, (int(x), cyr - ab.height // 2), ab)
+    if m.get("minute"):
+        mt = f"{m['minute']}-daqiqa"
+        mf = B(30)
+        d.text((W // 2 - d.textlength(mt, font=mf) / 2, 500), mt, font=mf, fill=(195, 214, 255))
+    if channel_label:
+        d.text((pad, H - 48), channel_label, font=R(22), fill=(205, 218, 255))
+    img.save(out_path)
+    return out_path
+
+
 if __name__ == "__main__":
     out = "/home/claude/dist"
     dl = "21-iyun, 2026 \u00b7 Yakshanba"
