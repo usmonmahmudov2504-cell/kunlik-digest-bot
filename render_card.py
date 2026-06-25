@@ -656,8 +656,16 @@ def _badge(url, h):
     return img
 
 
-def _tname(n, maxlen=14):
-    n = n or ""
+_TEAM_SHORT = {
+    "Cape Verde Islands": "Cape Verde", "Bosnia and Herzegovina": "Bosnia",
+    "Trinidad and Tobago": "Trinidad", "Dominican Republic": "Dominican R.",
+    "United Arab Emirates": "UAE", "Central African Republic": "CAR",
+    "Republic of Ireland": "Ireland", "Korea Republic": "South Korea",
+}
+
+
+def _tname(n, maxlen=15):
+    n = _TEAM_SHORT.get(n, n or "")
     return n if len(n) <= maxlen else n[:maxlen - 1] + "…"
 
 

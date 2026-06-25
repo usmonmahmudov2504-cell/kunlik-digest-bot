@@ -447,23 +447,50 @@ TSDB = "https://www.thesportsdb.com/api/v1/json/3"
 WC_LEAGUE = "4429"
 WC_SEASON = "2026"
 
-# Jamoa nomi -> flagcdn ISO kodi (milliy terma bayroqlari)
+# Jamoa nomi -> flagcdn ISO kodi (barcha FIFA mamlakatlari, to'liq).
 WC_FLAGS = {
-    "argentina": "ar", "australia": "au", "austria": "at", "belgium": "be", "bolivia": "bo",
-    "bosnia and herzegovina": "ba", "bosnia": "ba", "brazil": "br", "cameroon": "cm",
-    "canada": "ca", "chile": "cl", "colombia": "co", "costa rica": "cr", "croatia": "hr",
-    "curacao": "cw", "curaçao": "cw", "czech republic": "cz", "czechia": "cz", "denmark": "dk",
-    "ecuador": "ec", "egypt": "eg", "england": "gb-eng", "france": "fr", "germany": "de",
-    "ghana": "gh", "greece": "gr", "haiti": "ht", "honduras": "hn", "iran": "ir", "italy": "it",
-    "ivory coast": "ci", "cote d'ivoire": "ci", "côte d'ivoire": "ci", "jamaica": "jm",
-    "japan": "jp", "mexico": "mx", "morocco": "ma", "netherlands": "nl", "new zealand": "nz",
-    "nigeria": "ng", "norway": "no", "panama": "pa", "paraguay": "py", "peru": "pe",
-    "poland": "pl", "portugal": "pt", "qatar": "qa", "saudi arabia": "sa", "scotland": "gb-sct",
-    "senegal": "sn", "serbia": "rs", "slovakia": "sk", "south africa": "za", "south korea": "kr",
-    "korea republic": "kr", "spain": "es", "sweden": "se", "switzerland": "ch", "tunisia": "tn",
-    "turkey": "tr", "turkiye": "tr", "türkiye": "tr", "ukraine": "ua", "united states": "us",
-    "usa": "us", "uruguay": "uy", "wales": "gb-wls", "algeria": "dz", "cape verde": "cv",
-    "jordan": "jo", "uzbekistan": "uz", "germany ": "de",
+    # Osiyo
+    "iran": "ir", "iraq": "iq", "qatar": "qa", "saudi arabia": "sa", "japan": "jp",
+    "south korea": "kr", "korea republic": "kr", "north korea": "kp", "dpr korea": "kp",
+    "australia": "au", "uzbekistan": "uz", "united arab emirates": "ae", "uae": "ae",
+    "china": "cn", "china pr": "cn", "jordan": "jo", "oman": "om", "bahrain": "bh",
+    "kuwait": "kw", "syria": "sy", "lebanon": "lb", "palestine": "ps", "india": "in",
+    "indonesia": "id", "thailand": "th", "vietnam": "vn", "kyrgyzstan": "kg", "tajikistan": "tj",
+    "turkmenistan": "tm", "kazakhstan": "kz", "malaysia": "my", "philippines": "ph", "yemen": "ye",
+    # Afrika
+    "morocco": "ma", "senegal": "sn", "tunisia": "tn", "egypt": "eg", "algeria": "dz",
+    "nigeria": "ng", "ghana": "gh", "cameroon": "cm", "ivory coast": "ci", "cote d'ivoire": "ci",
+    "côte d'ivoire": "ci", "cape verde": "cv", "cape verde islands": "cv", "south africa": "za",
+    "mali": "ml", "burkina faso": "bf", "dr congo": "cd", "congo dr": "cd", "congo": "cg",
+    "angola": "ao", "zambia": "zm", "kenya": "ke", "uganda": "ug", "tanzania": "tz",
+    "ethiopia": "et", "sudan": "sd", "libya": "ly", "gabon": "ga", "benin": "bj", "togo": "tg",
+    "mauritania": "mr", "guinea": "gn", "guinea-bissau": "gw", "equatorial guinea": "gq",
+    "namibia": "na", "zimbabwe": "zw", "mozambique": "mz", "madagascar": "mg", "comoros": "km",
+    "gambia": "gm", "sierra leone": "sl", "liberia": "lr", "niger": "ne", "rwanda": "rw",
+    # Yevropa
+    "england": "gb-eng", "scotland": "gb-sct", "wales": "gb-wls", "northern ireland": "gb-nir",
+    "france": "fr", "germany": "de", "spain": "es", "portugal": "pt", "italy": "it",
+    "netherlands": "nl", "belgium": "be", "croatia": "hr", "switzerland": "ch", "sweden": "se",
+    "denmark": "dk", "norway": "no", "poland": "pl", "austria": "at", "ukraine": "ua",
+    "serbia": "rs", "turkey": "tr", "turkiye": "tr", "türkiye": "tr", "czechia": "cz",
+    "czech republic": "cz", "greece": "gr", "hungary": "hu", "romania": "ro", "bulgaria": "bg",
+    "slovakia": "sk", "slovenia": "si", "finland": "fi", "iceland": "is", "ireland": "ie",
+    "albania": "al", "north macedonia": "mk", "montenegro": "me", "bosnia and herzegovina": "ba",
+    "bosnia": "ba", "kosovo": "xk", "moldova": "md", "georgia": "ge", "armenia": "am",
+    "azerbaijan": "az", "belarus": "by", "estonia": "ee", "latvia": "lv", "lithuania": "lt",
+    "luxembourg": "lu", "cyprus": "cy", "malta": "mt", "israel": "il", "russia": "ru",
+    # Shimoliy/Markaziy Amerika
+    "usa": "us", "united states": "us", "mexico": "mx", "canada": "ca", "costa rica": "cr",
+    "honduras": "hn", "panama": "pa", "jamaica": "jm", "el salvador": "sv", "guatemala": "gt",
+    "nicaragua": "ni", "haiti": "ht", "trinidad and tobago": "tt", "curacao": "cw",
+    "curaçao": "cw", "cuba": "cu", "dominican republic": "do", "suriname": "sr", "guyana": "gy",
+    "grenada": "gd", "antigua and barbuda": "ag", "barbados": "bb", "bermuda": "bm", "belize": "bz",
+    # Janubiy Amerika
+    "argentina": "ar", "brazil": "br", "uruguay": "uy", "colombia": "co", "chile": "cl",
+    "peru": "pe", "ecuador": "ec", "paraguay": "py", "bolivia": "bo", "venezuela": "ve",
+    # Okeaniya
+    "new zealand": "nz", "fiji": "fj", "papua new guinea": "pg", "tahiti": "pf",
+    "solomon islands": "sb", "vanuatu": "vu", "new caledonia": "nc",
 }
 
 
