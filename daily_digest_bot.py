@@ -646,12 +646,15 @@ def _wx_emoji(desc: str) -> str:
 
 
 def _channel_footer() -> str:
-    """Har post tagiga bosiladigan kanal havolasi."""
+    """Har post tagidagi DOIMIY (bir xil) brend footeri: xizmatlar + obuna + ulashish."""
     ch = str(TELEGRAM_CHANNEL).strip()
-    if ch.startswith("@"):
-        uname = ch[1:]
-        return f'\n\n\U0001F449 <a href="https://t.me/{uname}">{ch}</a>'
-    return ""
+    if not ch.startswith("@"):
+        return ""
+    uname = ch[1:]
+    link = f'<a href="https://t.me/{uname}">{ch}</a>'
+    return ("\n\n━━━━━━━━━━━━━━"
+            "\n🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
+            f"\n👉 {link} — obuna bo'ling 🔔 · ulashing 📢")
 
 
 def _append_footer(text: str) -> str:
