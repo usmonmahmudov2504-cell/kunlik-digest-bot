@@ -499,6 +499,63 @@ def _flag_url(team: str):
     return f"https://flagcdn.com/w80/{code}.png" if code else None
 
 
+# Jamoa (mamlakat) nomi -> o'zbekcha (bayroq inglizcha nomdan, ko'rsatish o'zbekcha)
+UZ_TEAMS = {
+    "argentina": "Argentina", "australia": "Avstraliya", "austria": "Avstriya",
+    "belgium": "Belgiya", "bolivia": "Boliviya", "bosnia and herzegovina": "Bosniya",
+    "bosnia": "Bosniya", "brazil": "Braziliya", "bulgaria": "Bolgariya", "cameroon": "Kamerun",
+    "canada": "Kanada", "cape verde": "Kabo-Verde", "cape verde islands": "Kabo-Verde",
+    "chile": "Chili", "china": "Xitoy", "china pr": "Xitoy", "colombia": "Kolumbiya",
+    "costa rica": "Kosta-Rika", "croatia": "Xorvatiya", "cuba": "Kuba", "curacao": "Kyurasao",
+    "curaçao": "Kyurasao", "cyprus": "Kipr", "czechia": "Chexiya", "czech republic": "Chexiya",
+    "dr congo": "KDR", "congo dr": "KDR", "congo": "Kongo", "denmark": "Daniya",
+    "dominican republic": "Dominikana", "ecuador": "Ekvador", "egypt": "Misr",
+    "england": "Angliya", "estonia": "Estoniya", "ethiopia": "Efiopiya", "finland": "Finlyandiya",
+    "france": "Fransiya", "gabon": "Gabon", "georgia": "Gruziya", "germany": "Germaniya",
+    "ghana": "Gana", "greece": "Gretsiya", "guatemala": "Gvatemala", "guinea": "Gvineya",
+    "haiti": "Gaiti", "honduras": "Gonduras", "hungary": "Vengriya", "iceland": "Islandiya",
+    "india": "Hindiston", "indonesia": "Indoneziya", "iran": "Eron", "iraq": "Iroq",
+    "ireland": "Irlandiya", "israel": "Isroil", "italy": "Italiya", "ivory coast": "Kot-d'Ivuar",
+    "cote d'ivoire": "Kot-d'Ivuar", "côte d'ivoire": "Kot-d'Ivuar", "jamaica": "Yamayka",
+    "japan": "Yaponiya", "jordan": "Iordaniya", "kazakhstan": "Qozog'iston", "kenya": "Keniya",
+    "kosovo": "Kosovo", "kuwait": "Quvayt", "kyrgyzstan": "Qirg'iziston", "latvia": "Latviya",
+    "lebanon": "Livan", "libya": "Liviya", "lithuania": "Litva", "luxembourg": "Lyuksemburg",
+    "malaysia": "Malayziya", "mali": "Mali", "malta": "Malta", "mexico": "Meksika",
+    "moldova": "Moldova", "montenegro": "Chernogoriya", "morocco": "Marokash",
+    "mozambique": "Mozambik", "namibia": "Namibiya", "netherlands": "Niderlandiya",
+    "new zealand": "Yangi Zelandiya", "nigeria": "Nigeriya", "north korea": "Shimoliy Koreya",
+    "dpr korea": "Shimoliy Koreya", "north macedonia": "Shim. Makedoniya",
+    "northern ireland": "Shim. Irlandiya", "norway": "Norvegiya", "oman": "Ummon",
+    "palestine": "Falastin", "panama": "Panama", "paraguay": "Paragvay", "peru": "Peru",
+    "poland": "Polsha", "portugal": "Portugaliya", "qatar": "Qatar", "romania": "Ruminiya",
+    "russia": "Rossiya", "rwanda": "Ruanda", "saudi arabia": "Saudiya Arab.",
+    "scotland": "Shotlandiya", "senegal": "Senegal", "serbia": "Serbiya",
+    "sierra leone": "Syerra-Leone", "slovakia": "Slovakiya", "slovenia": "Sloveniya",
+    "solomon islands": "Solomon o.", "south africa": "JAR", "south korea": "Janubiy Koreya",
+    "korea republic": "Janubiy Koreya", "spain": "Ispaniya", "sudan": "Sudan",
+    "sweden": "Shvetsiya", "switzerland": "Shveytsariya", "syria": "Suriya", "tahiti": "Taiti",
+    "tajikistan": "Tojikiston", "tanzania": "Tanzaniya", "thailand": "Tailand", "togo": "Togo",
+    "trinidad and tobago": "Trinidad", "tunisia": "Tunis", "turkey": "Turkiya",
+    "turkiye": "Turkiya", "türkiye": "Turkiya", "turkmenistan": "Turkmaniston",
+    "uae": "BAA", "united arab emirates": "BAA", "uganda": "Uganda", "ukraine": "Ukraina",
+    "united states": "AQSH", "usa": "AQSH", "uruguay": "Urugvay", "uzbekistan": "O'zbekiston",
+    "venezuela": "Venesuela", "vietnam": "Vyetnam", "wales": "Uels", "yemen": "Yaman",
+    "zambia": "Zambiya", "zimbabwe": "Zimbabve", "algeria": "Jazoir", "albania": "Albaniya",
+    "armenia": "Armaniston", "azerbaijan": "Ozarbayjon", "bahrain": "Bahrayn", "belarus": "Belarus",
+    "burkina faso": "Burkina-Faso", "fiji": "Fiji", "new caledonia": "Yangi Kaledoniya",
+    "papua new guinea": "Papua-Yangi Gvineya", "vanuatu": "Vanuatu",
+}
+
+
+def _uz_team(name: str) -> str:
+    return UZ_TEAMS.get((name or "").strip().lower(), name or "")
+
+
+def _team_meta(name: str):
+    """(o'zbekcha_nom, bayroq_url) -> bayroq inglizcha nomdan, nom o'zbekcha."""
+    return _uz_team(name), _flag_url(name)
+
+
 def _match_time_uz(ts: str) -> str:
     """UTC timestamp -> Toshkent HH:MM."""
     try:
@@ -530,18 +587,27 @@ def _tsdb(path: str) -> dict:
         return {}
 
 
+def _mk_match(hn, an, time=None, hs=None, as_=None, rnd=None):
+    h_uz, hb = _team_meta(hn)
+    a_uz, ab = _team_meta(an)
+    d = {"home": h_uz, "away": a_uz, "hb": hb, "ab": ab, "round": rnd}
+    if time is not None:
+        d["time"] = time
+    if hs is not None or as_ is not None:
+        d["hs"], d["as"] = hs, as_
+    return d
+
+
 def get_fixtures(limit: int = 10) -> list:
     d = _fd(f"/competitions/{FD_COMP}/matches?status=SCHEDULED")
     if d and d.get("matches"):
         ms = sorted(d["matches"], key=lambda m: m.get("utcDate", ""))[:limit]
-        return [{"home": m["homeTeam"]["name"], "away": m["awayTeam"]["name"],
-                 "hb": _flag_url(m["homeTeam"]["name"]), "ab": _flag_url(m["awayTeam"]["name"]),
-                 "time": _match_time_uz(m.get("utcDate", "")), "round": m.get("matchday")}
+        return [_mk_match(m["homeTeam"]["name"], m["awayTeam"]["name"],
+                          time=_match_time_uz(m.get("utcDate", "")), rnd=m.get("matchday"))
                 for m in ms]
     ev = _tsdb(f"eventsnextleague.php?id={WC_LEAGUE}").get("events") or []
-    return [{"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
-             "hb": _flag_url(e.get("strHomeTeam", "")), "ab": _flag_url(e.get("strAwayTeam", "")),
-             "time": _match_time_uz(e.get("strTimestamp", "")), "round": e.get("intRound")}
+    return [_mk_match(e.get("strHomeTeam", ""), e.get("strAwayTeam", ""),
+                      time=_match_time_uz(e.get("strTimestamp", "")), rnd=e.get("intRound"))
             for e in ev[:limit]]
 
 
@@ -549,14 +615,12 @@ def get_results(limit: int = 10) -> list:
     d = _fd(f"/competitions/{FD_COMP}/matches?status=FINISHED")
     if d and d.get("matches"):
         ms = sorted(d["matches"], key=lambda m: m.get("utcDate", ""), reverse=True)[:limit]
-        return [{"home": m["homeTeam"]["name"], "away": m["awayTeam"]["name"],
-                 "hb": _flag_url(m["homeTeam"]["name"]), "ab": _flag_url(m["awayTeam"]["name"]),
-                 "hs": m["score"]["fullTime"].get("home"), "as": m["score"]["fullTime"].get("away"),
-                 "round": m.get("matchday")} for m in ms]
+        return [_mk_match(m["homeTeam"]["name"], m["awayTeam"]["name"],
+                          hs=m["score"]["fullTime"].get("home"), as_=m["score"]["fullTime"].get("away"),
+                          rnd=m.get("matchday")) for m in ms]
     ev = _tsdb(f"eventspastleague.php?id={WC_LEAGUE}").get("events") or []
-    return [{"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
-             "hb": _flag_url(e.get("strHomeTeam", "")), "ab": _flag_url(e.get("strAwayTeam", "")),
-             "hs": e.get("intHomeScore"), "as": e.get("intAwayScore"), "round": e.get("intRound")}
+    return [_mk_match(e.get("strHomeTeam", ""), e.get("strAwayTeam", ""),
+                      hs=e.get("intHomeScore"), as_=e.get("intAwayScore"), rnd=e.get("intRound"))
             for e in ev[:limit]]
 
 
@@ -572,7 +636,7 @@ def get_standings() -> dict:
             for r in s.get("table", []):
                 tm = r["team"]["name"]
                 groups.setdefault(g, []).append({
-                    "rank": r.get("position"), "team": tm, "badge": _flag_url(tm),
+                    "rank": r.get("position"), "team": _uz_team(tm), "badge": _flag_url(tm),
                     "p": r.get("playedGames"), "gd": r.get("goalDifference"), "pts": r.get("points")})
         if groups:
             return dict(sorted(groups.items()))
@@ -581,7 +645,7 @@ def get_standings() -> dict:
         g = r.get("strGroup", "") or "—"
         tm = r.get("strTeam", "")
         groups.setdefault(g, []).append({
-            "rank": r.get("intRank"), "team": tm, "badge": _flag_url(tm),
+            "rank": r.get("intRank"), "team": _uz_team(tm), "badge": _flag_url(tm),
             "p": r.get("intPlayed"), "gd": r.get("intGoalDifference"), "pts": r.get("intPoints")})
     for g in groups:
         groups[g].sort(key=lambda x: int(x["rank"] or 99))
