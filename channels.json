@@ -10,7 +10,7 @@
     "name": "Futbol Xabarlari",
     "channel": "@FutbolUz25",
     "token_env": "TELEGRAM_BOT_TOKEN",
-    "groups": ["F", "R", "S", "C"],
+    "groups": ["G", "F", "R", "S", "C"],
     "news_preset": "football",
     "translate": "uz",
     "footer_services": "⚽ Jahon futboli · 🇺🇿 O'zbekiston · 📊 Natijalar"

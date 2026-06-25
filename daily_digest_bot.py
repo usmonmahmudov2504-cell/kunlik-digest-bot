@@ -556,6 +556,28 @@ def _team_meta(name: str):
     return _uz_team(name), _flag_url(name)
 
 
+def _flag_emoji(name: str) -> str:
+    """Jamoa nomidan bayroq EMOJI (matnli gol postlari uchun). gb-* uchun bo'sh."""
+    code = WC_FLAGS.get((name or "").strip().lower(), "")
+    if len(code) == 2 and code.isalpha():
+        return "".join(chr(0x1F1E6 + ord(c) - ord("a")) for c in code.lower())
+    return ""
+
+
+def get_live() -> list:
+    """Hozir o'ynalayotgan JCH o'yinlari (joriy hisob bilan). FD kaliti kerak."""
+    d = _fd(f"/competitions/{FD_COMP}/matches?status=IN_PLAY") or {}
+    out = []
+    for m in d.get("matches", []):
+        hn, an = m["homeTeam"]["name"], m["awayTeam"]["name"]
+        sc = (m.get("score", {}) or {}).get("fullTime", {}) or {}
+        out.append({"id": m.get("id"), "home": _uz_team(hn), "away": _uz_team(an),
+                    "he": _flag_emoji(hn), "ae": _flag_emoji(an),
+                    "hs": sc.get("home") or 0, "as": sc.get("away") or 0,
+                    "minute": m.get("minute")})
+    return out
+
+
 def _match_time_uz(ts: str) -> str:
     """UTC timestamp -> Toshkent HH:MM."""
     try:
@@ -1161,6 +1183,17 @@ def standings_caption(date_label, groups) -> str:
     return _finish(parts)
 
 
+def goal_caption(m) -> str:
+    """Real-vaqt GOOOL posti (matnli, tez)."""
+    he, ae = m.get("he", ""), m.get("ae", "")
+    parts = ["⚽️ <b>GOOOL!</b>", "",
+             f"{he} <b>{m['home']} {m['hs']} : {m['as']} {m['away']}</b> {ae}".strip()]
+    if m.get("minute"):
+        parts.append(f"⏱ {m['minute']}-daqiqa")
+    parts += ["", "#JCH2026 #Gol #Futbol"]
+    return _finish(parts)
+
+
 # ------------------------------------------------------------------ TELEGRAM
 def _read_more_button(url):
     """Maqolaga 'To'liq o'qish' inline tugmasi (Telegram knopkasi)."""
@@ -1281,7 +1314,7 @@ def within_window(group: str, now) -> bool:
     """
     if os.environ.get("FORCE_POST"):     # majburiy yuborish (qo'lda test uchun)
         return True
-    if group == "ALL":                   # qo'lda ishga tushirish -> doim chiqsin
+    if group in ("ALL", "G"):            # qo'lda / gol-kuzatuvchi -> doim (gol tunda ham)
         return True
     if group in ("AUTO", "C"):           # heartbeat/tezkor -> faol-soat oynasi
         return NEWS_ACTIVE[0] <= now.hour < NEWS_ACTIVE[1]
@@ -1349,6 +1382,8 @@ def run_channel(now, date_label, group, cfg) -> list:
                if g in groups_on and daily_due(g, now, daily_state)}
         if "C" in groups_on:
             due.add("C")
+        if "G" in groups_on:
+            due.add("G")
         if d_due:
             due.add("D")
         print(f"  [{ch}] {now.hour:02d}:{now.minute:02d} -> {sorted(due)}"
@@ -1408,6 +1443,27 @@ def run_channel(now, date_label, group, cfg) -> list:
                 posted.append(_news_key(it))
         if fresh:
             save_posted(posted)
+
+    # --- G guruh: real-vaqt GOLLAR (jonli o'yinlarda hisob o'zgarsa GOOOL post) ---
+    if want("G"):
+        live = get_live()
+        prev = _load_json("live_scores.json", {})
+        new_prev = {}
+        for m in live:
+            k = str(m.get("id"))
+            cur_sum = (m["hs"] or 0) + (m["as"] or 0)
+            new_prev[k] = {"sum": cur_sum, "s": f"{m['hs']}-{m['as']}"}
+            old = prev.get(k)
+            # birinchi ko'rishda jim (mavjud hisobni e'lon qilmaymiz); keyin gol bo'lsa post
+            if old is not None and cur_sum > old.get("sum", 0):
+                try:
+                    post_message(goal_caption(m))
+                    print(f"GOOOL ✓ {m['home']} {m['hs']}-{m['as']} {m['away']}")
+                    results.append(True)
+                except Exception as e:
+                    print("Gol post xato:", e)
+                    results.append(False)
+        _save_json("live_scores.json", new_prev)
 
     # --- D guruh: Kurslar + Dollar (kuniga 3 marta; kurs kun davomida o'zgaradi) ---
     if want("D"):
