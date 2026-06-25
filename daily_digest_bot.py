@@ -874,6 +874,24 @@ def daily_due(group: str, now, daily_state: dict) -> bool:
     return target <= cur <= target + MAX_DELAY_HOURS
 
 
+# Kurslar/Dollar kuniga bir necha marta chiqadi (kurs kun davomida o'zgaradi).
+D_SLOTS = (9.5, 13.0, 17.0)              # mo'ljal vaqtlari (Toshkent) -> 3 marta
+SLOT_WINDOW = 2.0                        # har slot oynasi (slotlar 3.5+ soat oralig'ida -> ustma-ust emas)
+
+
+def due_slots(now, daily_state: dict) -> list:
+    """Bugun hali chiqmagan va vaqti kelgan D (kurslar) slotlari indekslari."""
+    cur = now.hour + now.minute / 60.0
+    today = now.strftime("%Y-%m-%d")
+    out = []
+    for i, slot in enumerate(D_SLOTS):
+        if daily_state.get(f"D{i}") == today:
+            continue
+        if slot <= cur <= slot + SLOT_WINDOW:
+            out.append(i)
+    return out
+
+
 def main() -> None:
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
     date_label = f"{now.day}-{UZ_MONTHS[now.month]}"   # qisqa: yil/hafta kuni yo'q
@@ -898,18 +916,24 @@ def main() -> None:
     daily_state = load_daily() if group == "AUTO" else {}
 
     if group == "AUTO":
-        # heartbeat: tezkor (C) doim, kunlik (A/B/D) faqat vaqti kelganda va bugun chiqmagan bo'lsa
-        due = {"C"} | {g for g in ("A", "B", "D", "M") if daily_due(g, now, daily_state)}
-        print(f"AUTO (hozir {now.hour:02d}:{now.minute:02d}) -> chiqariladigan: {sorted(due)}")
+        # heartbeat: tezkor (C) doim, kunlik (A/B/M) bir marta, D (kurslar) kuniga 3 marta
+        d_due = due_slots(now, daily_state)
+        due = {"C"} | {g for g in ("A", "B", "M") if daily_due(g, now, daily_state)}
+        if d_due:
+            due.add("D")
+        print(f"AUTO (hozir {now.hour:02d}:{now.minute:02d}) -> chiqariladigan: {sorted(due)}"
+              + (f" (D-slot {d_due})" if d_due else ""))
 
         def want(g):
             return g in due
     else:
+        d_due = [0]   # qo'lda: D bir marta
         def want(g):
             return group == "ALL" or group == g
 
     results = []
-    done_today = []   # AUTO rejimida bugun chiqarilgan kunlik guruhlar
+    done_today = []        # AUTO: bugun chiqarilgan kunlik guruhlar (A/B/M)
+    state_changed = False  # daily_state o'zgardimi (D slot/saqlash uchun)
 
     # --- A guruh: Bugun + Kun maslahati ---
     if want("A"):
@@ -951,7 +975,7 @@ def main() -> None:
         if fresh:
             save_posted(posted)
 
-    # --- D guruh: Kurslar + Dollar ---
+    # --- D guruh: Kurslar + Dollar (kuniga 3 marta; kurs kun davomida o'zgaradi) ---
     if want("D"):
         cbu_text, overview, _ = get_cbu_rates()
         banks = get_bank_rates()
@@ -966,10 +990,16 @@ def main() -> None:
             lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch,
                                          usd_value=usd_value, prev_usd=prev_usd),
             currency_caption(date_label, cbu_text, banks), "Dollar"))
-        # bugungi kurslarni keyingi kun uchun saqlaymiz (kurslar posti chiqqan bo'lsa)
-        if ok_rates:
+        # O'zgarish (▲/▼) doim KECHA bilan solishtirilsin -> kurslarni kuniga faqat
+        # birinchi postda saqlaymiz (keyingi 2 post o'sha kungi kecha bilan taqqoslaydi).
+        if ok_rates and daily_state.get("Dsaved") != today:
             save_prev_rates({r["code"]: r["value"] for r in overview})
-        done_today.append("D")
+            daily_state["Dsaved"] = today
+            state_changed = True
+        if group == "AUTO":
+            for i in d_due:
+                daily_state[f"D{i}"] = today
+            state_changed = True
 
     # --- M guruh: Bozor (oltin + Bitcoin) ---
     if want("M"):
@@ -987,8 +1017,8 @@ def main() -> None:
             print("Bozor ma'lumoti topilmadi.")
         done_today.append("M")
 
-    # AUTO rejimida: bugun chiqarilgan kunlik guruhlarni belgilab qo'yamiz (qayta chiqmasin)
-    if group == "AUTO" and done_today:
+    # AUTO rejimida: bugun chiqarilganlarni belgilab qo'yamiz (qayta chiqmasin)
+    if group == "AUTO" and (done_today or state_changed):
         for g in done_today:
             daily_state[g] = today
         save_daily(daily_state)
