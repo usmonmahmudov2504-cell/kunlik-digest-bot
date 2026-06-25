@@ -677,25 +677,22 @@ _CLOSE = {
     "market": ["Bozorni kuzatib boring 📊", "Ehtiyotkor bo'ling!", "Foydali bo'lsin!",
                "Sabr — bozorning kaliti 🔑", "Omad!"],
 }
+# Har post turi uchun QAT'IY (doim bir xil) hashtaglar -> tartibli, kategoriyalangan.
 _TAGS = {
-    "weather": ["#ObHavo", "#Ozbekiston", "#Harorat", "#BugungiObHavo"],
-    "day": ["#Bugun", "#Kun", "#Taqvim"],
-    "rates": ["#ValyutaKurslari", "#Kurs", "#Markaziybank", "#Valyuta"],
-    "dollar": ["#DollarKursi", "#Kurs", "#Dollar", "#Bank", "#Valyuta"],
-    "market": ["#Oltin", "#Bitcoin", "#Bozor", "#Kripto"],
-    "news": ["#TezkorXabar", "#Yangilik", "#Ozbekiston", "#Xabar"],
-    "advice": ["#Motivatsiya", "#Kun", "#Ibrat"],
+    "weather": "#ObHavo #Ozbekiston",
+    "day": "#Bugun #Kun #Taqvim",
+    "rates": "#ValyutaKurslari #Kurs #Markaziybank",
+    "dollar": "#DollarKursi #Dollar #Kurs",
+    "market": "#Oltin #Bitcoin #Bozor #Kripto",
+    "news": "#TezkorXabar #Yangilik",
+    "advice": "#Motivatsiya",
 }
 
 
 def _tags(key, extra=None) -> str:
-    """Hashtaglarni har safar boshqacha tartib/sondan tanlaydi (1-3 ta)."""
-    pool = list(_TAGS.get(key, []))
-    random.shuffle(pool)
-    pick = pool[:random.randint(1, min(3, len(pool)))] if pool else []
-    if extra:
-        pick = [extra] + pick
-    return " ".join(pick)
+    """Post turiga mos QAT'IY hashtaglar (doim bir xil)."""
+    base = _TAGS.get(key, "")
+    return f"{extra} {base}".strip() if extra else base
 
 
 def _natural_line(context: str, pool: list) -> str:
