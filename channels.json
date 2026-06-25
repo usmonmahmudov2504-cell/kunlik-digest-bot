@@ -5,5 +5,14 @@
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["A", "B", "C", "D", "M"],
     "footer_services": "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
+  },
+  {
+    "name": "Futbol Xabarlari",
+    "channel": "@FutbolUz25",
+    "token_env": "TELEGRAM_BOT_TOKEN",
+    "groups": ["C"],
+    "news_preset": "football",
+    "translate": "uz",
+    "footer_services": "⚽ Jahon futboli · 🇺🇿 O'zbekiston · 📊 Natijalar"
   }
 ]
