@@ -27,6 +27,8 @@ import io
 import re
 import html
 import json
+import random
+import hashlib
 import datetime
 import requests
 import feedparser
@@ -590,15 +592,68 @@ def _finish(parts) -> str:
     return _append_footer("\n".join(parts))
 
 
+# ---- Tabiiylik: iboralar puli + hashtag rotatsiyasi + Claude hibrid ----
+# Har post boshqacha ko'rinishi uchun (botligi bilinmasligi uchun).
+_CLOSE = {
+    "weather": ["Hammaga xayrli kun! ☀️", "Kuningiz yaxshi o'tsin!", "Omad bilan!",
+                "Issiqda suv ichishni unutmang 💧", "Bugun ham zo'r kun bo'lsin 🌞",
+                "Ko'chada ehtiyot bo'ling!", "Sog'lig'ingizni asrang 🙌"],
+    "advice": ["Kuningiz unumli o'tsin! 💪", "Omad! 🙌", "Bugun bir qadam oldinga 🚀",
+               "Yaxshi kun tilaymiz!", "Harakat — barakat 🌿", "O'zingizga ishoning!"],
+    "rates": ["Kuningiz baraka topsin!", "Foydali bo'lsa — ulashing 💹", "Kursni kuzatib boring!",
+              "Hisob-kitobda omad!", "Yaxshi savdolar tilaymiz!"],
+    "market": ["Bozorni kuzatib boring 📊", "Ehtiyotkor bo'ling!", "Foydali bo'lsin!",
+               "Sabr — bozorning kaliti 🔑", "Omad!"],
+}
+_TAGS = {
+    "weather": ["#ObHavo", "#Ozbekiston", "#Harorat", "#BugungiObHavo"],
+    "day": ["#Bugun", "#Kun", "#Taqvim"],
+    "rates": ["#ValyutaKurslari", "#Kurs", "#Markaziybank", "#Valyuta"],
+    "dollar": ["#DollarKursi", "#Kurs", "#Dollar", "#Bank", "#Valyuta"],
+    "market": ["#Oltin", "#Bitcoin", "#Bozor", "#Kripto"],
+    "news": ["#TezkorXabar", "#Yangilik", "#Ozbekiston", "#Xabar"],
+    "advice": ["#Motivatsiya", "#Kun", "#Ibrat"],
+}
+
+
+def _tags(key, extra=None) -> str:
+    """Hashtaglarni har safar boshqacha tartib/sondan tanlaydi (1-3 ta)."""
+    pool = list(_TAGS.get(key, []))
+    random.shuffle(pool)
+    pick = pool[:random.randint(1, min(3, len(pool)))] if pool else []
+    if extra:
+        pick = [extra] + pick
+    return " ".join(pick)
+
+
+def _natural_line(context: str, pool: list) -> str:
+    """Tabiiy bitta qator. Claude bo'lsa u yozadi, bo'lmasa puldan tasodifiy (hibrid)."""
+    base = random.choice(pool) if pool else ""
+    if client is None:
+        return base
+    try:
+        prompt = (f"O'zbek Telegram kanali posti uchun {context}. Bitta juda qisqa, "
+                  f"tabiiy, jonli yakuniy jumla yoz (4-8 so'z, kerak bo'lsa 1 emoji, "
+                  f"har safar boshqacha). Faqat jumlani qaytar, qo'shtirnoqsiz. "
+                  f"Masalan: {base}")
+        resp = client.messages.create(model="claude-sonnet-4-6", max_tokens=40,
+                                      messages=[{"role": "user", "content": prompt}])
+        t = "".join(b.text for b in resp.content if b.type == "text").strip()
+        return t.strip('"«»') or base
+    except Exception as e:
+        print("natural_line xato:", e)
+        return base
+
+
 def weather_caption(date_label, weather) -> str:
     """Ob-havo posti uchun elegant, emoji bilan caption (barcha viloyatlar)."""
     parts = [f"\U0001F326\ufe0f <b>Ob-havo</b> \u2014 {date_label}", ""]
     for region, (temp, desc) in weather.items():
         parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>  <i>{desc}</i>")
     parts.append("")
-    parts.append("Hammaga xayrli kun! \u2600\ufe0f")
+    parts.append(_natural_line("ob-havo posti yakuni", _CLOSE["weather"]))
     parts.append("")
-    parts.append("#ObHavo #Ozbekiston")
+    parts.append(_tags("weather"))
     return _finish(parts)
 
 
@@ -634,7 +689,7 @@ def day_caption(date_label, info) -> str:
             text = "".join(b.text for b in resp.content if b.type == "text").strip() or text
         except Exception as e:
             print("Claude caption xato (bugun):", e)
-    text += "\n\n#Bugun #Kun"
+    text += "\n\n" + _tags("day")
     return _append_footer(text)
 
 
@@ -656,7 +711,7 @@ def breaking_caption(item) -> str:
     """Tezkor (real-vaqt) bitta xabar uchun caption. Rasm ichida matn yo'q ->
     sarlavha faqat shu yerda; to'liq o'qish uchun inline tugma qo'shiladi."""
     title = item["title"] if isinstance(item, dict) else item
-    parts = ["\u26a1 <b>Tezkor xabar</b>", "", f"<b>{title}</b>", "", "#TezkorXabar #Yangilik"]
+    parts = ["\u26a1 <b>Tezkor xabar</b>", "", f"<b>{title}</b>", "", _tags("news")]
     return _finish(parts)
 
 
@@ -675,7 +730,7 @@ def currency_overview_caption(date_label, rows) -> str:
     parts.append("")
     parts.append("\U0001F4B5 Dollarning banklar bo'yicha kursi \u2014 keyingi postda")
     parts.append("")
-    parts.append("#ValyutaKurslari #Kurs #Markaziybank")
+    parts.append(_tags("rates"))
     return _finish(parts)
 
 
@@ -688,9 +743,9 @@ def advice_caption(date_label, tip) -> str:
     parts = [f"{icon} <b>{label}</b>", ""]
     parts.append(f"\u00ab{tip['text']}\u00bb")
     parts.append("")
-    parts.append("Kuningiz unumli o'tsin! \U0001F4AA")
+    parts.append(_natural_line("kun hikmati/maslahati posti yakuni", _CLOSE["advice"]))
     parts.append("")
-    parts.append(tag)
+    parts.append(_tags("advice", extra=tag))
     return _finish(parts)
 
 
@@ -720,7 +775,9 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
         parts.append("")
     parts.append("\U0001F4CA To'liq banklar jadvali \u2014 rasmda \u2b06\ufe0f")
     parts.append("")
-    parts.append("#DollarKursi #Kurs #Dollar")
+    parts.append(_natural_line("dollar kursi posti yakuni", _CLOSE["rates"]))
+    parts.append("")
+    parts.append(_tags("dollar"))
     return _finish(parts)
 
 
@@ -736,9 +793,9 @@ def market_caption(date_label, rows) -> str:
         if "gramm" in r.get("sub", ""):
             parts.append(f"   <i>{r['sub']}</i>")
     parts.append("")
-    parts.append("Narxlar jahon bozori bo'yicha (USD)")
+    parts.append(_natural_line("oltin va kripto bozori posti yakuni", _CLOSE["market"]))
     parts.append("")
-    parts.append("#Oltin #Bitcoin #Bozor #Kripto")
+    parts.append(_tags("market"))
     return _finish(parts)
 
 
@@ -859,11 +916,19 @@ def within_window(group: str, now) -> bool:
     return target <= cur <= target + MAX_DELAY_HOURS
 
 
+def _jitter_h(now, key, max_min=40) -> float:
+    """Sana+key bo'yicha barqaror tasodifiy ofset (soatda). Post vaqti har kuni
+    biroz farq qiladi -> 'aynan bir xil daqiqa' mexanik ko'rinishi yo'qoladi."""
+    s = f"{now.strftime('%Y-%m-%d')}|{key}"
+    d = int(hashlib.md5(s.encode()).hexdigest(), 16) % (max_min + 1)
+    return d / 60.0
+
+
 def daily_due(group: str, now, daily_state: dict) -> bool:
     """AUTO rejimida: guruh bugun hali chiqmagan va vaqti kelganmi?
 
     Mo'ljal vaqtidan keyin MAX_DELAY_HOURS ichida birinchi heartbeat post qiladi.
-    Bitta aniq cron o'rniga 15 daqiqalik urinishlar -> GitHub kechikishiga chidamli.
+    Boshlanishiga kunlik jitter qo'shiladi (tabiiy, har kuni boshqa daqiqada).
     """
     if daily_state.get(group) == now.strftime("%Y-%m-%d"):
         return False                     # bugun allaqachon chiqarilgan
@@ -871,7 +936,7 @@ def daily_due(group: str, now, daily_state: dict) -> bool:
     if target is None:
         return False
     cur = now.hour + now.minute / 60.0
-    return target <= cur <= target + MAX_DELAY_HOURS
+    return target + _jitter_h(now, group) <= cur <= target + MAX_DELAY_HOURS
 
 
 # Kurslar/Dollar kuniga bir necha marta chiqadi (kurs kun davomida o'zgaradi).
@@ -887,7 +952,7 @@ def due_slots(now, daily_state: dict) -> list:
     for i, slot in enumerate(D_SLOTS):
         if daily_state.get(f"D{i}") == today:
             continue
-        if slot <= cur <= slot + SLOT_WINDOW:
+        if slot + _jitter_h(now, f"D{i}") <= cur <= slot + SLOT_WINDOW:
             out.append(i)
     return out
 
