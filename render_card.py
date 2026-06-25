@@ -16,21 +16,22 @@ import os
 import math
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-# ---- Ranglar ----
-BG     = (15, 23, 42)
-BG_TOP = (16, 24, 43)        # fon gradienti: tepa (biroz quyuq)
-BG_BOT = (24, 34, 58)        # fon gradienti: past (biroz ochiq)
-CARD   = (30, 41, 59)
-CARD2  = (51, 65, 85)
-TEXT   = (241, 245, 249)
-MUTED  = (148, 163, 184)
-ACCENT = (56, 189, 248)
-GREEN  = (52, 211, 153)
-GOLD   = (251, 191, 36)
-PURPLE = (167, 139, 250)
-TEAL   = (45, 212, 191)
-RED    = (248, 113, 113)      # kurs pasayishi (o'zgarish ko'rsatkichi)
-DIVIDER = (51, 65, 85)
+# ---- Ranglar (oq/yorug' tema) ----
+BG     = (255, 255, 255)
+BG_TOP = (237, 242, 248)      # fon gradienti: tepa (juda och kulrang)
+BG_BOT = (252, 253, 255)      # fon gradienti: past (deyarli oq)
+CARD   = (255, 255, 255)      # oq panellar (soya bilan ajraladi)
+CARD2  = (241, 245, 249)      # ikkilamchi och kulrang
+TEXT   = (17, 24, 39)         # deyarli qora
+MUTED  = (107, 114, 128)      # kulrang-500
+ACCENT = (37, 99, 235)        # ko'k-600
+GREEN  = (5, 150, 105)        # emerald-600
+GOLD   = (202, 138, 4)        # amber-600 (oqda kontrast uchun quyuqroq)
+PURPLE = (124, 58, 237)       # violet-600
+TEAL   = (13, 148, 136)       # teal-600
+RED    = (220, 38, 38)        # qizil-600 (kurs pasayishi)
+DIVIDER = (226, 232, 240)
+SHADOW = (15, 23, 42)         # yumshoq soya rangi (oq fonda kulrang ko'rinadi)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_DIRS = [os.path.join(HERE, "fonts"), "/usr/share/fonts/truetype/dejavu", r"C:\Windows\Fonts"]
@@ -126,15 +127,18 @@ def _panel(img, box, radius=16, fill=CARD, blur=16, dy=7, alpha=120):
 
     Soya faqat karta atrofidagi kichik hududda hisoblanadi (tez)."""
     x0, y0, x1, y1 = [int(v) for v in box]
+    a = min(alpha, 45)                       # oq fon -> yumshoq, nozik soya
     m = blur * 3
     rx0, ry0 = max(x0 - m, 0), max(y0 - m, 0)
     rx1, ry1 = min(x1 + m, img.width), min(y1 + m + dy, img.height)
     sh = Image.new("RGBA", (rx1 - rx0, ry1 - ry0), (0, 0, 0, 0))
     ImageDraw.Draw(sh).rounded_rectangle(
-        (x0 - rx0, y0 - ry0 + dy, x1 - rx0, y1 - ry0 + dy), radius=radius, fill=(0, 0, 0, alpha))
+        (x0 - rx0, y0 - ry0 + dy, x1 - rx0, y1 - ry0 + dy), radius=radius, fill=(*SHADOW, a))
     sh = sh.filter(ImageFilter.GaussianBlur(blur))
     img.paste(sh, (rx0, ry0), sh)
-    ImageDraw.Draw(img).rounded_rectangle(box, radius=radius, fill=fill)
+    d2 = ImageDraw.Draw(img)
+    d2.rounded_rectangle(box, radius=radius, fill=fill)
+    d2.rounded_rectangle(box, radius=radius, outline=DIVIDER, width=1)   # nozik chek
 
 
 # Karta turi -> sarlavhadagi ikonka (vektor, accent rangda chiziladi)
@@ -180,7 +184,6 @@ def _draw_icon(d, kind, box, color):
 
 
 def _header(img, W, pad, title, date_label, accent=ACCENT, icon=None):
-    d = ImageDraw.Draw(img)
     _panel(img, (pad, pad, W - pad, pad + 96), 18, CARD)
     d = ImageDraw.Draw(img)
     tx = pad + 30
@@ -189,10 +192,21 @@ def _header(img, W, pad, title, date_label, accent=ACCENT, icon=None):
         ix0, iy0 = pad + 22, pad + 18
         _draw_icon(d, icon, (ix0, iy0, ix0 + ch, iy0 + ch), accent)
         tx = ix0 + ch + 20
-    d.text((tx, pad + 22), title, font=B(48), fill=TEXT)
-    f = R(26)
-    tw = d.textlength(date_label, font=f)
-    d.text((W - pad - 30 - tw, pad + 36), date_label, font=f, fill=accent)
+    # sana (o'ng) -- kichikroq shrift, sarlavhaga yopishmasligi uchun
+    f = R(24)
+    dw = d.textlength(date_label, font=f) if date_label else 0
+    date_x = W - pad - 26 - dw
+    if date_label:
+        d.text((date_x, pad + 38), date_label, font=f, fill=accent)
+    # sarlavha -- sana bilan to'qnashmasligi uchun avtomatik kichrayadi
+    avail = date_x - tx - 16 if date_label else (W - pad - 30 - tx)
+    tf = B(48)
+    for size in (48, 42, 36, 32):
+        tf = B(size)
+        if d.textlength(title, font=tf) <= avail:
+            break
+    th = tf.getbbox(title)[3] if hasattr(tf, "getbbox") else 48
+    d.text((tx, pad + (96 - th) // 2 - 6), title, font=tf, fill=TEXT)
 
 
 def _paste_banner(img, d, banner_path, box, radius=16):
@@ -246,7 +260,7 @@ def fmt(n):
 def _glyph_for(desc):
     dd = desc.lower()
     if "qor" in dd:
-        return ("\u2744", (191, 219, 254))
+        return ("\u2744", (37, 99, 235))
     if "yomg'ir" in dd or "jala" in dd:
         return ("\u2602", ACCENT)
     if "momaqaldiroq" in dd:
@@ -263,16 +277,16 @@ def _glyph_for(desc):
 # Harorat -> rang (issiq qizg'ish, sovuq ko'k). O'rtacha haroratlar neytral (TEXT).
 def _temp_color(t):
     if t >= 38:
-        return (248, 113, 113)     # jazirama -> qizil
+        return (220, 38, 38)       # jazirama -> qizil
     if t >= 30:
-        return (251, 146, 60)      # issiq -> to'q sariq
+        return (234, 88, 12)       # issiq -> to'q sariq
     if t >= 22:
-        return (250, 204, 21)      # iliq -> sariq
+        return (202, 138, 4)       # iliq -> amber
     if t >= 12:
-        return TEXT                # mo'tadil -> oq
+        return TEXT                # mo'tadil -> quyuq
     if t >= 2:
-        return (125, 211, 252)     # salqin -> och ko'k
-    return (96, 165, 250)          # sovuq -> ko'k
+        return (2, 132, 199)       # salqin -> sky-600
+    return (37, 99, 235)           # sovuq -> ko'k
 
 
 # ============================================================ 1) BUGUN
@@ -318,7 +332,7 @@ def render_day_card(date_label, weekday, season, day_of_year, days_left,
     d.text((pad + 6, y), "Bugungi sana / bayram", font=B(28), fill=TEXT)
     y += 50
     for line in hol_lines:
-        _rrect(d, (pad, y, W - pad, y + 44), 12, CARD)
+        _rrect(d, (pad, y, W - pad, y + 44), 12, CARD2)
         d.text((pad + 18, y + 9), line, font=R(25), fill=TEXT if hol else MUTED)
         y += 50
 
@@ -514,7 +528,7 @@ def render_currency_card(date_label, cbu_rate, banks, out_path="currency.png",
         is_bb = b.get("buy") == max_buy
         is_bs = b.get("sell") == min_sell
         if is_bb or is_bs:
-            _rrect(d, (cx, ry - 1, cx + colw, ry + row_h - 6), 9, CARD)
+            _rrect(d, (cx, ry - 1, cx + colw, ry + row_h - 6), 9, CARD2)
         d.text((cx + 14, ry + 6), _ellipsize(d, b["bank"], f_n, colw - 200), font=f_n, fill=TEXT)
         buy_s, sell_s = fmt(b.get("buy")), fmt(b.get("sell"))
         fb = f_nb if is_bb else f_n
@@ -545,12 +559,12 @@ def render_advice_card(date_label, kind, text, out_path="advice.png", channel_la
     body_h = len(lines) * 50
     H = pad + 96 + 40 + 70 + 40 + body_h + 70
     img, d = _new(W, H)
-    _header(img, W, pad, "Kun maslahati", date_label, TEAL, "advice")
+    _header(img, W, pad, "Kun maslahati", "", TEAL, "advice")   # sana yo'q
     y = pad + 96 + 40
 
     klbl = kind.upper()
     kw = d.textlength(klbl, font=B(22))
-    _rrect(d, (pad, y, pad + kw + 40, y + 42), 21, CARD)
+    _rrect(d, (pad, y, pad + kw + 40, y + 42), 21, CARD2)
     d.text((pad + 20, y + 8), klbl, font=B(22), fill=TEAL)
     y += 60
 
@@ -566,7 +580,7 @@ def render_advice_card(date_label, kind, text, out_path="advice.png", channel_la
 
 
 # ============================================================ 7) BOZOR (oltin + kripto)
-_MK_COLOR = {"gold": GOLD, "btc": (247, 147, 26), "eth": (124, 131, 253)}
+_MK_COLOR = {"gold": GOLD, "btc": (234, 88, 12), "eth": (79, 70, 229)}
 
 
 def render_market_card(date_label, rows, out_path="market.png", channel_label=""):

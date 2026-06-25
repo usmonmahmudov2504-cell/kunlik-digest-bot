@@ -597,6 +597,8 @@ def weather_caption(date_label, weather) -> str:
         parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>  <i>{desc}</i>")
     parts.append("")
     parts.append("Hammaga xayrli kun! \u2600\ufe0f")
+    parts.append("")
+    parts.append("#ObHavo #Ozbekiston")
     return _finish(parts)
 
 
@@ -632,6 +634,7 @@ def day_caption(date_label, info) -> str:
             text = "".join(b.text for b in resp.content if b.type == "text").strip() or text
         except Exception as e:
             print("Claude caption xato (bugun):", e)
+    text += "\n\n#Bugun #Kun"
     return _append_footer(text)
 
 
@@ -653,7 +656,7 @@ def breaking_caption(item) -> str:
     """Tezkor (real-vaqt) bitta xabar uchun caption. Rasm ichida matn yo'q ->
     sarlavha faqat shu yerda; to'liq o'qish uchun inline tugma qo'shiladi."""
     title = item["title"] if isinstance(item, dict) else item
-    parts = ["\u26a1 <b>Tezkor xabar</b>", "", f"<b>{title}</b>"]
+    parts = ["\u26a1 <b>Tezkor xabar</b>", "", f"<b>{title}</b>", "", "#TezkorXabar #Yangilik"]
     return _finish(parts)
 
 
@@ -671,18 +674,23 @@ def currency_overview_caption(date_label, rows) -> str:
                      f"({r['unit']}) \u2014 {r['rate']} so'm")
     parts.append("")
     parts.append("\U0001F4B5 Dollarning banklar bo'yicha kursi \u2014 keyingi postda")
+    parts.append("")
+    parts.append("#ValyutaKurslari #Kurs #Markaziybank")
     return _finish(parts)
 
 
 def advice_caption(date_label, tip) -> str:
-    """6-post: kun maslahati/hikmati caption."""
+    """6-post: kun maslahati/hikmati caption (sanasiz)."""
     kind = tip.get("kind", "Maslahat")
     icon = "\U0001F4A1" if kind == "Maslahat" else "\u2728"
     label = "Kun maslahati" if kind == "Maslahat" else "Kun hikmati"
-    parts = [f"{icon} <b>{label}</b> \u2014 {date_label}", ""]
+    tag = "#Maslahat" if kind == "Maslahat" else "#Hikmat"
+    parts = [f"{icon} <b>{label}</b>", ""]
     parts.append(f"\u00ab{tip['text']}\u00bb")
     parts.append("")
     parts.append("Kuningiz unumli o'tsin! \U0001F4AA")
+    parts.append("")
+    parts.append(tag)
     return _finish(parts)
 
 
@@ -711,6 +719,8 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
         parts.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy): " + "   ".join(pairs[:3]))
         parts.append("")
     parts.append("\U0001F4CA To'liq banklar jadvali \u2014 rasmda \u2b06\ufe0f")
+    parts.append("")
+    parts.append("#DollarKursi #Kurs #Dollar")
     return _finish(parts)
 
 
@@ -727,6 +737,8 @@ def market_caption(date_label, rows) -> str:
             parts.append(f"   <i>{r['sub']}</i>")
     parts.append("")
     parts.append("Narxlar jahon bozori bo'yicha (USD)")
+    parts.append("")
+    parts.append("#Oltin #Bitcoin #Bozor #Kripto")
     return _finish(parts)
 
 
