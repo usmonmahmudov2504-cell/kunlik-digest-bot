@@ -393,6 +393,78 @@ def fetch_news_image(items: list[dict], out_path: str = "news_banner.png") -> st
     return None
 
 
+# ------------------------------------------------------------------ INSTANT VIEW (telegra.ph)
+# Maqola matnini telegra.ph sahifasiga ko'chiramiz -> Telegram'da avtomatik
+# Instant View bilan ochiladi (obunachi ilovadan chiqmasdan to'liq o'qiydi).
+_TG_TOKEN = None
+
+
+def _telegraph_token():
+    global _TG_TOKEN
+    if _TG_TOKEN:
+        return _TG_TOKEN
+    try:
+        r = requests.get("https://api.telegra.ph/createAccount",
+                         params={"short_name": "AjoyibKun", "author_name": "Ajoyib Kun | Bugun"},
+                         timeout=15).json()
+        if r.get("ok"):
+            _TG_TOKEN = r["result"]["access_token"]
+    except Exception as e:
+        print("Telegraph account xato:", e)
+    return _TG_TOKEN
+
+
+def make_instant_view(item) -> str | None:
+    """Maqolani telegra.ph sahifasiga ko'chiradi va URL qaytaradi (Instant View).
+
+    Xato bo'lsa None (u holda tugma oddiy maqola havolasiga tushadi)."""
+    link = item.get("link") if isinstance(item, dict) else None
+    title = (item.get("title") if isinstance(item, dict) else item) or "Xabar"
+    if not link:
+        return None
+    token = _telegraph_token()
+    if not token:
+        return None
+    try:
+        html_ = requests.get(link, headers=UA_WEB, timeout=15).text
+        soup = BeautifulSoup(html_, "html.parser")
+        for bad in soup(["script", "style", "noscript", "figure", "iframe"]):
+            bad.decompose()
+        img = _og_image_url(link)
+        container = (soup.find("article")
+                     or soup.find(attrs={"itemprop": "articleBody"})
+                     or soup.find(class_=re.compile(r"article|content|news|post|body", re.I))
+                     or soup)
+        paras, seen = [], set()
+        for p in container.find_all("p"):
+            t = p.get_text(" ", strip=True)
+            if len(t) >= 40 and t not in seen:
+                seen.add(t)
+                paras.append(t)
+            if len(paras) >= 40:
+                break
+        if not paras:
+            paras = [title]
+        content = []
+        if img:
+            content.append({"tag": "figure", "children": [{"tag": "img", "attrs": {"src": img}}]})
+        for t in paras:
+            content.append({"tag": "p", "children": [t]})
+        content.append({"tag": "p", "children": [
+            {"tag": "a", "attrs": {"href": link}, "children": ["🔗 Manbada to‘liq o‘qish"]}]})
+        ch = str(TELEGRAM_CHANNEL).lstrip("@")
+        data = {"access_token": token, "title": title[:200],
+                "author_name": "Ajoyib Kun | Bugun", "author_url": f"https://t.me/{ch}",
+                "content": json.dumps(content, ensure_ascii=False), "return_content": "false"}
+        r = requests.post("https://api.telegra.ph/createPage", data=data, timeout=25).json()
+        if r.get("ok"):
+            return r["result"]["url"]
+        print("Telegraph createPage xato:", r)
+    except Exception as e:
+        print("Instant View xato:", e)
+    return None
+
+
 # ------------------------------------------------------------------ TEZKOR XABAR (holat)
 # Allaqachon post qilingan xabarlar ro'yxati shu faylda saqlanadi (takror oldini olish).
 # GitHub Actions har ish oxirida bu faylni repoga commit qiladi.
@@ -856,7 +928,10 @@ def post_breaking(item) -> bool:
     """
     try:
         caption = breaking_caption(item)
-        button = _read_more_button(item.get("link") if isinstance(item, dict) else None)
+        link = item.get("link") if isinstance(item, dict) else None
+        # Instant View sahifasi (telegra.ph) -> ilovadan chiqmasdan to'liq o'qish.
+        iv_url = make_instant_view(item)
+        button = _read_more_button(iv_url or link)
         img = fetch_news_image([item], "news_banner.png")
         if img:
             post_photo(img, caption, reply_markup=button)
