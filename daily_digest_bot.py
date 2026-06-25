@@ -477,7 +477,8 @@ WC_FLAGS = {
     "czech republic": "cz", "greece": "gr", "hungary": "hu", "romania": "ro", "bulgaria": "bg",
     "slovakia": "sk", "slovenia": "si", "finland": "fi", "iceland": "is", "ireland": "ie",
     "albania": "al", "north macedonia": "mk", "montenegro": "me", "bosnia and herzegovina": "ba",
-    "bosnia": "ba", "kosovo": "xk", "moldova": "md", "georgia": "ge", "armenia": "am",
+    "bosnia": "ba", "bosnia-herzegovina": "ba", "bosnia & herzegovina": "ba", "kosovo": "xk",
+    "moldova": "md", "georgia": "ge", "armenia": "am",
     "azerbaijan": "az", "belarus": "by", "estonia": "ee", "latvia": "lv", "lithuania": "lt",
     "luxembourg": "lu", "cyprus": "cy", "malta": "mt", "israel": "il", "russia": "ru",
     # Shimoliy/Markaziy Amerika
@@ -504,7 +505,8 @@ def _flag_url(team: str):
 UZ_TEAMS = {
     "argentina": "Argentina", "australia": "Avstraliya", "austria": "Avstriya",
     "belgium": "Belgiya", "bolivia": "Boliviya", "bosnia and herzegovina": "Bosniya",
-    "bosnia": "Bosniya", "brazil": "Braziliya", "bulgaria": "Bolgariya", "cameroon": "Kamerun",
+    "bosnia": "Bosniya", "bosnia-herzegovina": "Bosniya", "bosnia & herzegovina": "Bosniya",
+    "brazil": "Braziliya", "bulgaria": "Bolgariya", "cameroon": "Kamerun",
     "canada": "Kanada", "cape verde": "Kabo-Verde", "cape verde islands": "Kabo-Verde",
     "chile": "Chili", "china": "Xitoy", "china pr": "Xitoy", "colombia": "Kolumbiya",
     "costa rica": "Kosta-Rika", "croatia": "Xorvatiya", "cuba": "Kuba", "curacao": "Kyurasao",
