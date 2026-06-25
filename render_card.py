@@ -13,7 +13,9 @@ Faqat Pillow kerak. Shriftlar loyiha ichidagi fonts/ papkasidan olinadi.
 
 from __future__ import annotations
 import os
+import io
 import math
+import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # ---- Ranglar (oq/yorug' tema) ----
@@ -181,6 +183,14 @@ def _draw_icon(d, kind, box, color):
         d.ellipse((cx - r, cy - r * 1.1, cx + r, cy + r * 0.9), outline=color, width=lw)
         d.line((cx - r * 0.5, cy + r, cx + r * 0.5, cy + r), fill=color, width=lw)
         d.line((cx - r * 0.5, cy + r * 1.4, cx + r * 0.5, cy + r * 1.4), fill=color, width=lw)
+    elif kind == "ball":                                    # futbol to'pi
+        r = s * 0.30
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=color, width=lw)
+        d.ellipse((cx - r * 0.16, cy - r * 0.16, cx + r * 0.16, cy + r * 0.16), fill=color)
+        for a in range(0, 360, 72):
+            rad = math.radians(a - 90)
+            d.line((cx, cy, cx + math.cos(rad) * r * 0.62, cy + math.sin(rad) * r * 0.62),
+                   fill=color, width=max(1, lw // 2))
 
 
 def _header(img, W, pad, title, date_label, accent=ACCENT, icon=None):
@@ -618,6 +628,142 @@ def render_market_card(date_label, rows, out_path="market.png", channel_label=""
             d.text((tx, ty), txt, font=cf, fill=ccol)
         y += row_h + gap
     _footer(d, W, H, pad, channel_label, "Manba: gold-api, CoinGecko")
+    img.save(out_path)
+    return out_path
+
+
+# ============================================================ 8) FUTBOL (JCH-2026)
+_badge_cache: dict = {}
+
+
+def _badge(url, h):
+    """Jamoa logosini (URL) yuklab, balandlik bo'yicha o'lchaydi (keshlanadi)."""
+    if not url:
+        return None
+    key = (url, h)
+    if key in _badge_cache:
+        return _badge_cache[key]
+    img = None
+    try:
+        r = requests.get(url, timeout=12, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code == 200:
+            f = Image.open(io.BytesIO(r.content)).convert("RGBA")
+            w = max(1, round(f.width * h / f.height))
+            img = f.resize((w, h))
+    except Exception:
+        img = None
+    _badge_cache[key] = img
+    return img
+
+
+def _tname(n, maxlen=14):
+    n = n or ""
+    return n if len(n) <= maxlen else n[:maxlen - 1] + "…"
+
+
+def _match_row(img, d, y, row_h, m, center):
+    """Bitta o'yin qatori: vaqt | [logo] Uy — Mehmon [logo]. center = '—' yoki hisob."""
+    W, pad = 900, 40
+    mid = W // 2
+    cy = y + (row_h - 8) // 2
+    nf, cf = R(26), B(28)
+    if m.get("time"):
+        d.text((pad + 16, cy - 15), m["time"], font=B(25), fill=ACCENT)
+    hx = pad + 108
+    hb = _badge(m.get("hb"), 34)
+    if hb:
+        img.paste(hb, (pad + 108, cy - hb.height // 2), hb)
+        hx = pad + 108 + hb.width + 10
+    d.text((hx, cy - 15), _tname(m.get("home")), font=nf, fill=TEXT)
+    cw = d.textlength(center, font=cf)
+    d.text((mid - cw / 2, cy - 16), center, font=cf, fill=TEXT)
+    an = _tname(m.get("away"))
+    x_end = W - pad - 16
+    ab = _badge(m.get("ab"), 34)
+    if ab:
+        img.paste(ab, (x_end - ab.width, cy - ab.height // 2), ab)
+        x_end -= ab.width + 10
+    d.text((x_end - d.textlength(an, font=nf), cy - 15), an, font=nf, fill=TEXT)
+
+
+def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_label=""):
+    W, pad, row_h = 900, 40, 70
+    H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
+    img, d = _new(W, H)
+    _header(img, W, pad, "Bugungi o'yinlar", date_label, GREEN, "ball")
+    y = pad + 96 + 40
+    d.text((pad + 4, y), "JCH-2026 · vaqtlar Toshkent bo'yicha", font=R(22), fill=MUTED)
+    y += 40
+    if not matches:
+        d.text((pad + 6, y), "Yaqin kunlarda o'yin yo'q.", font=R(26), fill=MUTED)
+    for m in matches:
+        _panel(img, (pad, y, W - pad, y + row_h - 8), 12, CARD, blur=10, dy=4, alpha=80)
+        _match_row(img, d, y, row_h, m, "—")
+        y += row_h
+    _footer(d, W, H, pad, channel_label, "Manba: TheSportsDB")
+    img.save(out_path)
+    return out_path
+
+
+def render_results_card(date_label, matches, out_path="results.png", channel_label=""):
+    W, pad, row_h = 900, 40, 70
+    H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
+    img, d = _new(W, H)
+    _header(img, W, pad, "Natijalar", date_label, GOLD, "ball")
+    y = pad + 96 + 40
+    d.text((pad + 4, y), "JCH-2026 · so'nggi o'yinlar hisobi", font=R(22), fill=MUTED)
+    y += 40
+    if not matches:
+        d.text((pad + 6, y), "So'nggi natijalar topilmadi.", font=R(26), fill=MUTED)
+    for m in matches:
+        _panel(img, (pad, y, W - pad, y + row_h - 8), 12, CARD, blur=10, dy=4, alpha=80)
+        score = f"{m.get('hs', '')} : {m.get('as', '')}"
+        _match_row(img, d, y, row_h, m, score)
+        y += row_h
+    _footer(d, W, H, pad, channel_label, "Manba: TheSportsDB")
+    img.save(out_path)
+    return out_path
+
+
+def render_standings_card(date_label, groups, out_path="standings.png", channel_label=""):
+    W, pad, gap = 900, 40, 24
+    colw = (W - 2 * pad - gap) // 2
+
+    def gh(n):
+        return 34 + 28 + n * 32 + 22
+    colh, colgroups = [0, 0], [[], []]
+    for name, rows in groups.items():
+        c = 0 if colh[0] <= colh[1] else 1
+        colgroups[c].append((name, rows))
+        colh[c] += gh(len(rows))
+    H = pad + 96 + 40 + (max(colh) if any(colh) else 60) + 50
+    img, d = _new(W, H)
+    _header(img, W, pad, "Turnir jadvali", date_label, GOLD, "ball")
+    y0 = pad + 96 + 40
+    for cx, gc in [(pad, colgroups[0]), (pad + colw + gap, colgroups[1])]:
+        y = y0
+        for name, rows in gc:
+            d.text((cx + 4, y), name.replace("Group", "Guruh"), font=B(26), fill=ACCENT)
+            y += 34
+            d.text((cx + colw - 150, y), "O", font=R(18), fill=MUTED)
+            d.text((cx + colw - 102, y), "+/-", font=R(18), fill=MUTED)
+            d.text((cx + colw - 40, y), "B", font=R(18), fill=MUTED)
+            y += 28
+            for r in rows:
+                top = int(r.get("rank") or 9) <= 2
+                d.text((cx + 4, y), str(r.get("rank", "")), font=B(22), fill=(GREEN if top else MUTED))
+                tx = cx + 34
+                bb = _badge(r.get("badge"), 24)
+                if bb:
+                    img.paste(bb, (cx + 32, y - 1), bb)
+                    tx = cx + 32 + bb.width + 8
+                d.text((tx, y - 1), _tname(r.get("team"), 12), font=R(21), fill=TEXT)
+                d.text((cx + colw - 150, y), str(r.get("p", "")), font=R(20), fill=MUTED)
+                d.text((cx + colw - 104, y), str(r.get("gd", "")), font=R(20), fill=MUTED)
+                d.text((cx + colw - 42, y), str(r.get("pts", "")), font=B(22), fill=TEXT)
+                y += 32
+            y += 22
+    _footer(d, W, H, pad, channel_label, "Manba: TheSportsDB")
     img.save(out_path)
     return out_path
 

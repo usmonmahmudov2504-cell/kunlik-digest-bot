@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup
 from render_card import (
     render_day_card, render_news_card, render_weather_card,
     render_currency_overview_card, render_currency_card, render_advice_card,
-    render_market_card,
+    render_market_card, render_fixtures_card, render_results_card, render_standings_card,
 )
 
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
@@ -434,6 +434,66 @@ def translate_to_uz(text: str) -> str:
     except Exception as e:
         print("Tarjima xato:", e)
         return text
+
+
+# ------------------------------------------------------------------ FUTBOL (TheSportsDB)
+# Bepul, kalitsiz ("3" test kaliti). JCH-2026 = liga 4429.
+TSDB = "https://www.thesportsdb.com/api/v1/json/3"
+WC_LEAGUE = "4429"
+WC_SEASON = "2026"
+
+
+def _tsdb(path: str) -> dict:
+    try:
+        return requests.get(f"{TSDB}/{path}", headers=UA_WEB, timeout=20).json() or {}
+    except Exception as e:
+        print("TheSportsDB xato:", e)
+        return {}
+
+
+def _match_time_uz(ts: str) -> str:
+    """UTC timestamp -> Toshkent HH:MM."""
+    try:
+        dt = datetime.datetime.fromisoformat(ts.replace("Z", "")) + datetime.timedelta(hours=5)
+        return dt.strftime("%H:%M")
+    except Exception:
+        return "--:--"
+
+
+def get_fixtures(limit: int = 8) -> list:
+    ev = _tsdb(f"eventsnextleague.php?id={WC_LEAGUE}").get("events") or []
+    out = []
+    for e in ev[:limit]:
+        out.append({"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
+                    "hb": e.get("strHomeTeamBadge"), "ab": e.get("strAwayTeamBadge"),
+                    "time": _match_time_uz(e.get("strTimestamp", "")),
+                    "round": e.get("intRound")})
+    return out
+
+
+def get_results(limit: int = 8) -> list:
+    ev = _tsdb(f"eventspastleague.php?id={WC_LEAGUE}").get("events") or []
+    out = []
+    for e in ev[:limit]:
+        out.append({"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
+                    "hb": e.get("strHomeTeamBadge"), "ab": e.get("strAwayTeamBadge"),
+                    "hs": e.get("intHomeScore"), "as": e.get("intAwayScore"),
+                    "round": e.get("intRound")})
+    return out
+
+
+def get_standings() -> dict:
+    """Guruh -> [{rank, team, badge, p, gd, pts}] (tartiblangan)."""
+    rows = _tsdb(f"lookuptable.php?l={WC_LEAGUE}&s={WC_SEASON}").get("table") or []
+    groups: dict = {}
+    for r in rows:
+        g = r.get("strGroup", "") or "—"
+        groups.setdefault(g, []).append({
+            "rank": r.get("intRank"), "team": r.get("strTeam", ""), "badge": r.get("strBadge"),
+            "p": r.get("intPlayed"), "gd": r.get("intGoalDifference"), "pts": r.get("intPoints")})
+    for g in groups:
+        groups[g].sort(key=lambda x: int(x["rank"] or 99))
+    return dict(sorted(groups.items()))
 
 
 def _og_image_url(article_url: str) -> str | None:
@@ -911,6 +971,40 @@ def market_caption(date_label, rows) -> str:
     return _finish(parts)
 
 
+def fixtures_caption(date_label, matches) -> str:
+    parts = [f"⚽ <b>Bugungi o'yinlar</b> — {date_label}", "",
+             "<i>JCH-2026 · Toshkent vaqti</i>", ""]
+    for m in matches[:10]:
+        parts.append(f"🕐 <b>{m['time']}</b>  {m['home']} — {m['away']}")
+    if not matches:
+        parts.append("Yaqin kunlarda o'yin yo'q.")
+    parts.append("")
+    parts.append("📋 To'liq jadval — rasmda ⬆️")
+    parts.append("")
+    parts.append("#Futbol #JCH2026 #Oyinlar")
+    return _finish(parts)
+
+
+def results_caption(date_label, matches) -> str:
+    parts = [f"📊 <b>Natijalar</b> — {date_label}", "",
+             "<i>JCH-2026 · so'nggi o'yinlar</i>", ""]
+    for m in matches[:10]:
+        parts.append(f"⚽ {m['home']} <b>{m.get('hs', '')}:{m.get('as', '')}</b> {m['away']}")
+    if not matches:
+        parts.append("So'nggi natijalar topilmadi.")
+    parts.append("")
+    parts.append("#Futbol #JCH2026 #Natijalar")
+    return _finish(parts)
+
+
+def standings_caption(date_label, groups) -> str:
+    parts = [f"🏆 <b>Turnir jadvali</b> — {date_label}", "",
+             f"<i>JCH-2026 · {len(groups)} ta guruh</i>", "",
+             "📋 To'liq jadval — rasmda ⬆️", "",
+             "#Futbol #JCH2026 #Jadval"]
+    return _finish(parts)
+
+
 # ------------------------------------------------------------------ TELEGRAM
 def _read_more_button(url):
     """Maqolaga 'To'liq o'qish' inline tugmasi (Telegram knopkasi)."""
@@ -1014,7 +1108,8 @@ UZ_MONTHS = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun",
 
 # Jadval bo'yicha guruhlarning mo'ljal vaqti (Toshkent soati, kasrli). C guruh
 # endi tezkor kuzatuvchi (har 15 daqiqa) -> u jadval emas, faol-soat oynasi bilan ishlaydi.
-GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "D": 10.0, "M": 11.0}
+GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "D": 10.0, "M": 11.0,
+                     "F": 9.0, "R": 21.0, "S": 22.0}   # F=o'yinlar, R=natijalar, S=jadval
 # Mo'ljaldan keyin shu qancha soatgacha kechikkan run baribir post tashlaydi.
 # GitHub'ning odatdagi kechikishini yutish uchun saxiy, lekin tunni qoplamaydi.
 MAX_DELAY_HOURS = 5.0
@@ -1094,7 +1189,8 @@ def run_channel(now, date_label, group, cfg) -> list:
     if group == "AUTO":
         # heartbeat: tezkor (C) doim, kunlik (A/B/M) bir marta, D (kurslar) kuniga 3 marta
         d_due = due_slots(now, daily_state) if "D" in groups_on else []
-        due = {g for g in ("A", "B", "M") if g in groups_on and daily_due(g, now, daily_state)}
+        due = {g for g in ("A", "B", "M", "F", "R", "S")
+               if g in groups_on and daily_due(g, now, daily_state)}
         if "C" in groups_on:
             due.add("C")
         if d_due:
@@ -1198,6 +1294,30 @@ def run_channel(now, date_label, group, cfg) -> list:
         else:
             print("Bozor ma'lumoti topilmadi.")
         done_today.append("M")
+
+    # --- F guruh: Bugungi o'yinlar (JCH-2026) ---
+    if want("F"):
+        fixtures = get_fixtures(10)
+        results.append(safe_post(
+            lambda: render_fixtures_card(date_label, fixtures, "p8.png", ch),
+            fixtures_caption(date_label, fixtures), "O'yinlar"))
+        done_today.append("F")
+
+    # --- R guruh: Natijalar ---
+    if want("R"):
+        res = get_results(10)
+        results.append(safe_post(
+            lambda: render_results_card(date_label, res, "p9.png", ch),
+            results_caption(date_label, res), "Natijalar"))
+        done_today.append("R")
+
+    # --- S guruh: Turnir jadvali ---
+    if want("S"):
+        st = get_standings()
+        results.append(safe_post(
+            lambda: render_standings_card(date_label, st, "p10.png", ch),
+            standings_caption(date_label, st), "Jadval"))
+        done_today.append("S")
 
     # AUTO rejimida: bugun chiqarilganlarni belgilab qo'yamiz (qayta chiqmasin)
     if group == "AUTO" and (done_today or state_changed):
