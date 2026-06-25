@@ -565,6 +565,49 @@ def render_advice_card(date_label, kind, text, out_path="advice.png", channel_la
     return out_path
 
 
+# ============================================================ 7) BOZOR (oltin + kripto)
+_MK_COLOR = {"gold": GOLD, "btc": (247, 147, 26), "eth": (124, 131, 253)}
+
+
+def render_market_card(date_label, rows, out_path="market.png", channel_label=""):
+    """rows: [{"name","sub","value","chg"(% yoki None),"kind"}]."""
+    W, pad, row_h, gap = 900, 40, 96, 16
+    H = pad + 96 + 40 + len(rows) * (row_h + gap) + 50
+    img, d = _new(W, H)
+    _header(img, W, pad, "Bozor", date_label, GOLD, "rates")
+    y = pad + 96 + 40
+    for r in rows:
+        _panel(img, (pad, y, W - pad, y + row_h), 16, CARD, blur=12, dy=5, alpha=90)
+        col = _MK_COLOR.get(r.get("kind"), ACCENT)
+        cyc = y + row_h // 2
+        d.ellipse((pad + 24, cyc - 9, pad + 42, cyc + 9), fill=col)
+        d.text((pad + 64, y + 18), r["name"], font=B(34), fill=TEXT)
+        d.text((pad + 64, y + 60), r.get("sub", ""), font=R(22), fill=MUTED)
+        pf = B(40)
+        pw = d.textlength(r["value"], font=pf)
+        d.text((W - pad - 30 - pw, y + 16), r["value"], font=pf, fill=TEXT)
+        chg = r.get("chg")
+        if chg is not None:
+            up = chg >= 0
+            ccol = GREEN if up else RED
+            txt = f"{abs(chg):.2f}%".replace(".", ",")
+            cf = B(24)
+            cw = d.textlength(txt, font=cf)
+            tx = W - pad - 30 - cw
+            ty = y + 62
+            tri = 13
+            bx = tx - tri - 10
+            if up:
+                d.polygon([(bx, ty + 16), (bx + tri, ty + 16), (bx + tri / 2, ty + 3)], fill=ccol)
+            else:
+                d.polygon([(bx, ty + 5), (bx + tri, ty + 5), (bx + tri / 2, ty + 18)], fill=ccol)
+            d.text((tx, ty), txt, font=cf, fill=ccol)
+        y += row_h + gap
+    _footer(d, W, H, pad, channel_label, "Manba: gold-api, CoinGecko")
+    img.save(out_path)
+    return out_path
+
+
 if __name__ == "__main__":
     out = "/home/claude/dist"
     dl = "21-iyun, 2026 \u00b7 Yakshanba"

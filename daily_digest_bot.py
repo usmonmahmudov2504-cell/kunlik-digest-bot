@@ -35,6 +35,7 @@ from bs4 import BeautifulSoup
 from render_card import (
     render_day_card, render_news_card, render_weather_card,
     render_currency_overview_card, render_currency_card, render_advice_card,
+    render_market_card,
 )
 
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
@@ -233,6 +234,62 @@ def get_bank_rates() -> list[dict]:
     return banks
 
 
+# ------------------------------------------------------------------ BOZOR (oltin + kripto)
+def _fmt_usd(v: float) -> str:
+    if v >= 1000:
+        return f"{v:,.0f}".replace(",", " ")
+    return f"{v:,.2f}".replace(",", " ").replace(".", ",")
+
+
+def get_market_data() -> dict:
+    """Oltin (XAU $/oz) + Bitcoin/Ethereum ($, 24h%) + USD/UZS (gramm so'm uchun)."""
+    out = {"gold": None, "btc": None, "eth": None, "usd_uzs": None}
+    try:
+        data = requests.get("https://cbu.uz/uz/arkhiv-kursov-valyut/json/", headers=UA, timeout=15).json()
+        for it in data:
+            if it.get("Ccy") == "USD":
+                out["usd_uzs"] = float(it["Rate"])
+                break
+    except Exception as e:
+        print("USD kursi (bozor) xato:", e)
+    try:
+        g = requests.get("https://api.gold-api.com/price/XAU", headers=UA_WEB, timeout=15).json()
+        out["gold"] = float(g["price"])
+    except Exception as e:
+        print("Oltin narxi xato:", e)
+    try:
+        c = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum",
+            headers=UA_WEB, timeout=20).json()
+        for coin in c:
+            key = "btc" if coin.get("id") == "bitcoin" else "eth"
+            out[key] = {"usd": float(coin["current_price"]),
+                        "chg": coin.get("price_change_percentage_24h")}
+    except Exception as e:
+        print("Kripto narxi xato:", e)
+    return out
+
+
+def market_rows(m: dict, prev_gold=None) -> list[dict]:
+    """Bozor ma'lumotini karta/caption uchun qatorlarga aylantiradi."""
+    rows = []
+    if m.get("gold"):
+        sub = "1 untsiya (oz)"
+        if m.get("usd_uzs"):
+            gram = m["gold"] / 31.1035 * m["usd_uzs"]
+            sub = f"1 gramm ≈ {gram:,.0f} so'm".replace(",", " ")
+        chg = ((m["gold"] - prev_gold) / prev_gold * 100) if prev_gold else None
+        rows.append({"name": "Oltin", "sub": sub, "value": f"${_fmt_usd(m['gold'])}",
+                     "chg": chg, "kind": "gold"})
+    if m.get("btc"):
+        rows.append({"name": "Bitcoin", "sub": "BTC", "value": f"${_fmt_usd(m['btc']['usd'])}",
+                     "chg": m["btc"].get("chg"), "kind": "btc"})
+    if m.get("eth"):
+        rows.append({"name": "Ethereum", "sub": "ETH", "value": f"${_fmt_usd(m['eth']['usd'])}",
+                     "chg": m["eth"].get("chg"), "kind": "eth"})
+    return rows
+
+
 # ------------------------------------------------------------------ YANGILIKLAR
 def get_top_news(limit: int = 4) -> list[str]:
     feeds = ["https://www.gazeta.uz/uz/rss/", "https://daryo.uz/rss"]
@@ -405,6 +462,27 @@ def save_prev_rates(rates: dict) -> None:
         print("Kurs holatini saqlashda xato:", e)
 
 
+# Oltin narxining kunlik o'zgarishini hisoblash uchun (kechagi qiymat).
+_MARKET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "prev_market.json")
+
+
+def load_prev_market() -> dict:
+    try:
+        with open(_MARKET_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_prev_market(state: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_MARKET_PATH), exist_ok=True)
+        with open(_MARKET_PATH, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=0)
+    except Exception as e:
+        print("Bozor holatini saqlashda xato:", e)
+
+
 # ------------------------------------------------------------------ BUGUN (taqvim)
 SEASONS = {12: "Qish", 1: "Qish", 2: "Qish", 3: "Bahor", 4: "Bahor", 5: "Bahor",
            6: "Yoz", 7: "Yoz", 8: "Yoz", 9: "Kuz", 10: "Kuz", 11: "Kuz"}
@@ -571,13 +649,11 @@ def business_caption(date_label, headlines) -> str:
     return _finish(parts)
 
 
-def breaking_caption(date_label, item) -> str:
-    """Tezkor (real-vaqt) bitta biznes xabari uchun caption."""
+def breaking_caption(item) -> str:
+    """Tezkor (real-vaqt) bitta xabar uchun caption. Rasm ichida matn yo'q ->
+    sarlavha faqat shu yerda; to'liq o'qish uchun inline tugma qo'shiladi."""
     title = item["title"] if isinstance(item, dict) else item
-    parts = [f"\U0001F534 <b>Tezkor xabar</b> \u2014 biznes", "",
-             f"<b>{title}</b>", "",
-             f"<i>{date_label}</i>",
-             "\U0001F4E2 Batafsil \u2014 manbalarda"]
+    parts = ["\u26a1 <b>Tezkor xabar</b>", "", f"<b>{title}</b>"]
     return _finish(parts)
 
 
@@ -638,14 +714,39 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
     return _finish(parts)
 
 
+def market_caption(date_label, rows) -> str:
+    """Bozor (oltin + kripto) posti caption."""
+    parts = [f"\U0001F4C8 <b>Jahon bozori</b> \u2014 {date_label}", ""]
+    for r in rows:
+        line = f"<b>{r['name']}</b>: {r['value']}"
+        if r.get("chg") is not None:
+            arrow = "\U0001F53A" if r["chg"] >= 0 else "\U0001F53B"
+            line += f"  {arrow} {abs(r['chg']):.2f}%".replace(".", ",")
+        parts.append(line)
+        if "gramm" in r.get("sub", ""):
+            parts.append(f"   <i>{r['sub']}</i>")
+    parts.append("")
+    parts.append("Narxlar jahon bozori bo'yicha (USD)")
+    return _finish(parts)
+
+
 # ------------------------------------------------------------------ TELEGRAM
-def post_photo(image_path: str, caption: str) -> None:
+def _read_more_button(url):
+    """Maqolaga 'To'liq o'qish' inline tugmasi (Telegram knopkasi)."""
+    if not url:
+        return None
+    return {"inline_keyboard": [[{"text": "\U0001F4D6 To‘liq o‘qish", "url": url}]]}
+
+
+def post_photo(image_path: str, caption: str, reply_markup=None) -> None:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
 
     def _send(cap, html=True):
         data = {"chat_id": TELEGRAM_CHANNEL, "caption": cap}
         if html:
             data["parse_mode"] = "HTML"
+        if reply_markup:
+            data["reply_markup"] = json.dumps(reply_markup)
         with open(image_path, "rb") as f:
             return requests.post(url, data=data, files={"photo": f}, timeout=60)
 
@@ -659,6 +760,44 @@ def post_photo(image_path: str, caption: str) -> None:
         if not resp2.ok:
             print(f"  Qayta urinish ham xato {resp2.status_code}: {resp2.text}")
             resp2.raise_for_status()
+
+
+def post_message(text: str, reply_markup=None) -> None:
+    """Rasmsiz matnli post (sendMessage) -- og:image topilmagan tezkor xabar uchun."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHANNEL, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        data["reply_markup"] = json.dumps(reply_markup)
+    resp = requests.post(url, data=data, timeout=30)
+    if not resp.ok:
+        print(f"  Telegram {resp.status_code}: {resp.text}")
+        data2 = {"chat_id": TELEGRAM_CHANNEL, "text": re.sub(r"<[^>]+>", "", text)}
+        if reply_markup:
+            data2["reply_markup"] = json.dumps(reply_markup)
+        resp2 = requests.post(url, data=data2, timeout=30)
+        if not resp2.ok:
+            print(f"  Qayta urinish ham xato {resp2.status_code}: {resp2.text}")
+            resp2.raise_for_status()
+
+
+def post_breaking(item) -> bool:
+    """Tezkor xabar: maqola surati (rasm ichida matnsiz) + caption + 'To'liq o'qish' tugma.
+
+    og:image topilsa -> rasm bilan; topilmasa -> matnli post (sendMessage).
+    """
+    try:
+        caption = breaking_caption(item)
+        button = _read_more_button(item.get("link") if isinstance(item, dict) else None)
+        img = fetch_news_image([item], "news_banner.png")
+        if img:
+            post_photo(img, caption, reply_markup=button)
+        else:
+            post_message(caption, reply_markup=button)
+        print("Tezkor xabar \u2713")
+        return True
+    except Exception as e:
+        print(f"Tezkor xabar XATO: {e}")
+        return False
 
 
 def safe_post(render_fn, caption, label):
@@ -681,7 +820,7 @@ UZ_MONTHS = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun",
 
 # Jadval bo'yicha guruhlarning mo'ljal vaqti (Toshkent soati, kasrli). C guruh
 # endi tezkor kuzatuvchi (har 15 daqiqa) -> u jadval emas, faol-soat oynasi bilan ishlaydi.
-GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "D": 10.0}
+GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "D": 10.0, "M": 11.0}
 # Mo'ljaldan keyin shu qancha soatgacha kechikkan run baribir post tashlaydi.
 # GitHub'ning odatdagi kechikishini yutish uchun saxiy, lekin tunni qoplamaydi.
 MAX_DELAY_HOURS = 5.0
@@ -725,15 +864,15 @@ def daily_due(group: str, now, daily_state: dict) -> bool:
 
 def main() -> None:
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
-    date_label = f"{now.day}-{UZ_MONTHS[now.month]}, {now.year} \u00b7 {UZ_DAYS[now.weekday()]}"
+    date_label = f"{now.day}-{UZ_MONTHS[now.month]}"   # qisqa: yil/hafta kuni yo'q
     ch = str(TELEGRAM_CHANNEL)
 
     # POST_GROUP rejimlari:
     #   AUTO = heartbeat (har 15 daq): vaqti kelgan kunlik postlar (A/B/D) + tezkor (C).
     #          Aniq cron'ga ishonmaydi -> GitHub kechikishiga chidamli.
     #   A = Bugun + Kun maslahati (~07:00) | B = Ob-havo (~07:30)
-    #   C = Tezkor biznes xabarlari       | D = Kurslar + Dollar (~10:00)
-    #   ALL = hammasi (qo'lda test)
+    #   C = Tezkor xabarlar (real-vaqt)   | D = Kurslar + Dollar (~10:00)
+    #   M = Bozor: oltin + kripto (~11:00) | ALL = hammasi (qo'lda test)
     group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
 
     # Darvoza: faol oynadan tashqarida (masalan tunda) post tashlamaymiz. Xato emas -> exit 0.
@@ -748,7 +887,7 @@ def main() -> None:
 
     if group == "AUTO":
         # heartbeat: tezkor (C) doim, kunlik (A/B/D) faqat vaqti kelganda va bugun chiqmagan bo'lsa
-        due = {"C"} | {g for g in ("A", "B", "D") if daily_due(g, now, daily_state)}
+        due = {"C"} | {g for g in ("A", "B", "D", "M") if daily_due(g, now, daily_state)}
         print(f"AUTO (hozir {now.hour:02d}:{now.minute:02d}) -> chiqariladigan: {sorted(due)}")
 
         def want(g):
@@ -782,7 +921,8 @@ def main() -> None:
             weather_caption(date_label, weather), "Ob-havo"))
         done_today.append("B")
 
-    # --- C guruh: Tezkor biznes xabarlari (real-vaqt, faqat yangilarini) ---
+    # --- C guruh: Tezkor xabarlar (real-vaqt, faqat yangilarini) ---
+    # Faqat maqola surati + caption (rasm ichida matn yo'q) + "To'liq o'qish" tugmasi.
     if want("C"):
         business = get_business_news(limit=10)
         posted = load_posted()
@@ -790,14 +930,9 @@ def main() -> None:
         fresh = [it for it in business if _news_key(it) and _news_key(it) not in seen]
         fresh = fresh[:MAX_ALERTS]
         if not fresh:
-            print("Yangi biznes xabar yo'q (takror oldini olindi).")
+            print("Yangi xabar yo'q (takror oldini olindi).")
         for it in fresh:
-            banner = fetch_news_image([it], "news_banner.png")
-            ok = safe_post(
-                lambda it=it, banner=banner: render_news_card(
-                    "Biznes", date_label, [it], "p2.png", ch,
-                    "Manba: spot.uz, kun.uz, daryo.uz", banner),
-                breaking_caption(date_label, it), "Tezkor xabar")
+            ok = post_breaking(it)
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
@@ -823,6 +958,22 @@ def main() -> None:
         if ok_rates:
             save_prev_rates({r["code"]: r["value"] for r in overview})
         done_today.append("D")
+
+    # --- M guruh: Bozor (oltin + Bitcoin) ---
+    if want("M"):
+        m = get_market_data()
+        prev_m = load_prev_market()
+        rows = market_rows(m, prev_m.get("gold"))
+        if rows:
+            ok_m = safe_post(
+                lambda: render_market_card(date_label, rows, "p7.png", ch),
+                market_caption(date_label, rows), "Bozor")
+            results.append(ok_m)
+            if ok_m and m.get("gold"):
+                save_prev_market({"gold": m["gold"]})
+        else:
+            print("Bozor ma'lumoti topilmadi.")
+        done_today.append("M")
 
     # AUTO rejimida: bugun chiqarilgan kunlik guruhlarni belgilab qo'yamiz (qayta chiqmasin)
     if group == "AUTO" and done_today:
