@@ -693,6 +693,22 @@ def _og_image_url(article_url: str) -> str | None:
     return None
 
 
+def _og_desc(article_url: str) -> str:
+    """Maqolaning qisqa tavsifi (og:description). Topilmasa bo'sh."""
+    try:
+        resp = requests.get(article_url, headers=UA_WEB, timeout=15)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for prop in ("og:description", "description", "twitter:description"):
+            tag = (soup.find("meta", attrs={"property": prop})
+                   or soup.find("meta", attrs={"name": prop}))
+            if tag and tag.get("content"):
+                return tag["content"].strip()
+    except Exception:
+        pass
+    return ""
+
+
 def fetch_news_image(items: list[dict], out_path: str = "news_banner.png") -> str | None:
     """Sarlavhalardan birinchi mos maqolaning rasmini yuklab, PNG saqlaydi.
 
@@ -1250,29 +1266,31 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
 
 
 def post_breaking(item, translate=None) -> bool:
-    """Tezkor xabar: ixcham matn + Instant View preview karta.
+    """Tezkor xabar (toza): rasm tepada + qisqa matn + pastda "Instant View" tugma.
 
-    translate="uz" -> sarlavha O'zbekchaga tarjima qilinadi (ruscha manbalar uchun).
+    Tugma telegra.ph IV sahifasini ochadi (to'liq maqola, ichida rasm bilan).
     """
     try:
         title = item["title"] if isinstance(item, dict) else item
-        if translate == "uz":                 # ruscha/boshqa -> O'zbekcha sarlavha
-            title = translate_to_uz(title)
         link = item.get("link") if isinstance(item, dict) else None
-        # Instant View sahifasi (telegra.ph). Havola matn ichida -> Telegram
-        # ixcham preview karta + "\u26a1 INSTANT VIEW" tugmasini o'zi qo'shadi.
-        iv_url = make_instant_view(item)
-        preview_url = iv_url or link
-        parts = ["\u26a1 <b>Tezkor xabar</b>", ""]
-        if preview_url:
-            parts.append(f'<a href="{preview_url}"><b>{html.escape(title)}</b></a>')
+        desc = _og_desc(link) if link else ""
+        if translate == "uz":                 # ruscha/boshqa -> O'zbekcha
+            title = translate_to_uz(title)
+            if desc:
+                desc = translate_to_uz(desc[:300])
+        # Caption: faqat sarlavha (+ qisqa tavsif bo'lsa) \u2014 ortiqcha yozuv yo'q
+        cap = f"\u26a1 <b>{html.escape(title, quote=False)}</b>"
+        if desc:
+            cap += f"\n\n{html.escape(desc[:400], quote=False)}"
+        # Instant View sahifasi + pastdagi tugma
+        iv_url = make_instant_view(item) or link
+        button = ({"inline_keyboard": [[{"text": "\u26a1 Instant View", "url": iv_url}]]}
+                  if iv_url else None)
+        img = fetch_news_image([item], "news_banner.png")
+        if img:
+            post_photo(img, cap, reply_markup=button)            # rasm tepada
         else:
-            parts.append(f"<b>{html.escape(title)}</b>")
-        parts.append("")
-        parts.append(_tags("news"))
-        text = _finish(parts)
-        lpo = {"url": preview_url, "show_above_text": False} if preview_url else {"is_disabled": True}
-        post_message(text, link_preview=lpo)
+            post_message(cap, reply_markup=button, link_preview={"is_disabled": True})
         print("Tezkor xabar \u2713")
         return True
     except Exception as e:
