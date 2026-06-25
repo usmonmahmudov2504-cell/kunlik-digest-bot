@@ -661,6 +661,36 @@ def _tname(n, maxlen=14):
     return n if len(n) <= maxlen else n[:maxlen - 1] + "…"
 
 
+def _pitch_header(img, W, pad, title, date_label):
+    """Futbol kartalari uchun stadion-maydon uslubidagi sarlavha banneri."""
+    h = 96
+    bw = W - 2 * pad
+    banner = Image.new("RGB", (bw, h))
+    bd = ImageDraw.Draw(banner)
+    for yy in range(h):                       # maydon yashil gradienti
+        t = yy / (h - 1)
+        bd.line((0, yy, bw, yy), fill=(int(16 + 8 * t), int(82 - 36 * t), int(46 - 22 * t)))
+    line_col = (90, 140, 108)                 # nozik maydon chiziqlari (grassga yaqin)
+    bd.line((bw // 2, 6, bw // 2, h - 6), fill=line_col, width=2)
+    bd.ellipse((bw // 2 - 28, h // 2 - 28, bw // 2 + 28, h // 2 + 28), outline=line_col, width=2)
+    bd.line((6, h // 2, bw - 6, h // 2), fill=line_col, width=1)
+    glow = Image.new("RGBA", (bw, h), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    for gx in (70, bw - 70):
+        gd.ellipse((gx - 85, -65, gx + 85, 48), fill=(255, 255, 235, 70))
+    glow = glow.filter(ImageFilter.GaussianBlur(26))
+    banner = Image.alpha_composite(banner.convert("RGBA"), glow).convert("RGB")
+    mask = Image.new("L", (bw, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, bw - 1, h - 1), 18, fill=255)
+    img.paste(banner, (pad, pad), mask)
+    d = ImageDraw.Draw(img)
+    _draw_icon(d, "ball", (pad + 22, pad + 18, pad + 82, pad + 78), (255, 255, 255))
+    d.text((pad + 96, pad + 22), title, font=B(46), fill=(255, 255, 255))
+    f = R(24)
+    dw = d.textlength(date_label, font=f)
+    d.text((W - pad - 26 - dw, pad + 38), date_label, font=f, fill=(190, 235, 205))
+
+
 def _match_row(img, d, y, row_h, m, center):
     """Bitta o'yin qatori: vaqt | [logo] Uy — Mehmon [logo]. center = '—' yoki hisob."""
     W, pad = 900, 40
@@ -690,7 +720,7 @@ def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_l
     W, pad, row_h = 900, 40, 70
     H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
     img, d = _new(W, H)
-    _header(img, W, pad, "Bugungi o'yinlar", date_label, GREEN, "ball")
+    _pitch_header(img, W, pad, "Bugungi o'yinlar", date_label)
     y = pad + 96 + 40
     d.text((pad + 4, y), "JCH-2026 · vaqtlar Toshkent bo'yicha", font=R(22), fill=MUTED)
     y += 40
@@ -709,7 +739,7 @@ def render_results_card(date_label, matches, out_path="results.png", channel_lab
     W, pad, row_h = 900, 40, 70
     H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
     img, d = _new(W, H)
-    _header(img, W, pad, "Natijalar", date_label, GOLD, "ball")
+    _pitch_header(img, W, pad, "Natijalar", date_label)
     y = pad + 96 + 40
     d.text((pad + 4, y), "JCH-2026 · so'nggi o'yinlar hisobi", font=R(22), fill=MUTED)
     y += 40
@@ -738,7 +768,7 @@ def render_standings_card(date_label, groups, out_path="standings.png", channel_
         colh[c] += gh(len(rows))
     H = pad + 96 + 40 + (max(colh) if any(colh) else 60) + 50
     img, d = _new(W, H)
-    _header(img, W, pad, "Turnir jadvali", date_label, GOLD, "ball")
+    _pitch_header(img, W, pad, "Turnir jadvali", date_label)
     y0 = pad + 96 + 40
     for cx, gc in [(pad, colgroups[0]), (pad + colw + gap, colgroups[1])]:
         y = y0
