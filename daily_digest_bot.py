@@ -664,19 +664,23 @@ def _finish(parts) -> str:
     return _append_footer("\n".join(parts))
 
 
-# ---- Tabiiylik: iboralar puli + hashtag rotatsiyasi + Claude hibrid ----
-# Har post boshqacha ko'rinishi uchun (botligi bilinmasligi uchun).
+# ---- Yakun iboralari: faqat TOZA, to'g'ri jumlalar (g'aliz/sun'iy iboralar yo'q) ----
+# Faqat tabiiy o'rin bo'lgan postlarda (ob-havo, maslahat). Ma'lumot postlarida
+# (kurs/dollar/bozor) yakun jumlasi yo'q -> sun'iy "xayrli kun" tilanmaydi.
 _CLOSE = {
-    "weather": ["Hammaga xayrli kun! ☀️", "Kuningiz yaxshi o'tsin!", "Omad bilan!",
-                "Issiqda suv ichishni unutmang 💧", "Bugun ham zo'r kun bo'lsin 🌞",
-                "Ko'chada ehtiyot bo'ling!", "Sog'lig'ingizni asrang 🙌"],
-    "advice": ["Kuningiz unumli o'tsin! 💪", "Omad! 🙌", "Bugun bir qadam oldinga 🚀",
-               "Yaxshi kun tilaymiz!", "Harakat — barakat 🌿", "O'zingizga ishoning!"],
-    "rates": ["Kuningiz baraka topsin!", "Foydali bo'lsa — ulashing 💹", "Kursni kuzatib boring!",
-              "Hisob-kitobda omad!", "Yaxshi savdolar tilaymiz!"],
-    "market": ["Bozorni kuzatib boring 📊", "Ehtiyotkor bo'ling!", "Foydali bo'lsin!",
-               "Sabr — bozorning kaliti 🔑", "Omad!"],
+    "weather": ["Hammaga xayrli kun! ☀️", "Yaxshi kun tilaymiz!",
+                "Kuningiz yaxshi o'tsin!", "Sog'-salomat bo'ling!"],
+    "advice": ["Kuningiz unumli o'tsin! 💪", "Omad tilaymiz! 🙌",
+               "Yaxshi kun tilaymiz!", "Bugun ham harakatda bo'ling!"],
 }
+
+
+def _vary(key) -> str:
+    """Toza iboralar pulidan tasodifiy bittasi (faqat to'g'ri jumlalar)."""
+    pool = _CLOSE.get(key, [])
+    return random.choice(pool) if pool else ""
+
+
 # Har post turi uchun QAT'IY (doim bir xil) hashtaglar -> tartibli, kategoriyalangan.
 _TAGS = {
     "weather": "#ObHavo #Ozbekiston",
@@ -695,32 +699,13 @@ def _tags(key, extra=None) -> str:
     return f"{extra} {base}".strip() if extra else base
 
 
-def _natural_line(context: str, pool: list) -> str:
-    """Tabiiy bitta qator. Claude bo'lsa u yozadi, bo'lmasa puldan tasodifiy (hibrid)."""
-    base = random.choice(pool) if pool else ""
-    if client is None:
-        return base
-    try:
-        prompt = (f"O'zbek Telegram kanali posti uchun {context}. Bitta juda qisqa, "
-                  f"tabiiy, jonli yakuniy jumla yoz (4-8 so'z, kerak bo'lsa 1 emoji, "
-                  f"har safar boshqacha). Faqat jumlani qaytar, qo'shtirnoqsiz. "
-                  f"Masalan: {base}")
-        resp = client.messages.create(model="claude-sonnet-4-6", max_tokens=40,
-                                      messages=[{"role": "user", "content": prompt}])
-        t = "".join(b.text for b in resp.content if b.type == "text").strip()
-        return t.strip('"«»') or base
-    except Exception as e:
-        print("natural_line xato:", e)
-        return base
-
-
 def weather_caption(date_label, weather) -> str:
     """Ob-havo posti uchun elegant, emoji bilan caption (barcha viloyatlar)."""
     parts = [f"\U0001F326\ufe0f <b>Ob-havo</b> \u2014 {date_label}", ""]
     for region, (temp, desc) in weather.items():
         parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>  <i>{desc}</i>")
     parts.append("")
-    parts.append(_natural_line("ob-havo posti yakuni", _CLOSE["weather"]))
+    parts.append(_vary("weather"))
     parts.append("")
     parts.append(_tags("weather"))
     return _finish(parts)
@@ -812,7 +797,7 @@ def advice_caption(date_label, tip) -> str:
     parts = [f"{icon} <b>{label}</b>", ""]
     parts.append(f"\u00ab{tip['text']}\u00bb")
     parts.append("")
-    parts.append(_natural_line("kun hikmati/maslahati posti yakuni", _CLOSE["advice"]))
+    parts.append(_vary("advice"))
     parts.append("")
     parts.append(_tags("advice", extra=tag))
     return _finish(parts)
@@ -844,8 +829,6 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
         parts.append("")
     parts.append("\U0001F4CA To'liq banklar jadvali \u2014 rasmda \u2b06\ufe0f")
     parts.append("")
-    parts.append(_natural_line("dollar kursi posti yakuni", _CLOSE["rates"]))
-    parts.append("")
     parts.append(_tags("dollar"))
     return _finish(parts)
 
@@ -862,7 +845,7 @@ def market_caption(date_label, rows) -> str:
         if "gramm" in r.get("sub", ""):
             parts.append(f"   <i>{r['sub']}</i>")
     parts.append("")
-    parts.append(_natural_line("oltin va kripto bozori posti yakuni", _CLOSE["market"]))
+    parts.append("<i>Narxlar jahon bozori bo'yicha (USD)</i>")
     parts.append("")
     parts.append(_tags("market"))
     return _finish(parts)
