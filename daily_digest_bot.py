@@ -436,19 +436,40 @@ def translate_to_uz(text: str) -> str:
         return text
 
 
-# ------------------------------------------------------------------ FUTBOL (TheSportsDB)
-# Bepul, kalitsiz ("3" test kaliti). JCH-2026 = liga 4429.
+# ------------------------------------------------------------------ FUTBOL (JCH-2026)
+# Asosiy manba: football-data.org (FOOTBALL_API_KEY) -> to'liq ma'lumot.
+# Zaxira: TheSportsDB (kalitsiz, namuna). Logolar SVG bo'lgani uchun jamoa nomidan
+# mamlakat BAYROG'I (flagcdn PNG) ishlatamiz.
+FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY", "")
+FD_BASE = "https://api.football-data.org/v4"
+FD_COMP = "WC"
 TSDB = "https://www.thesportsdb.com/api/v1/json/3"
 WC_LEAGUE = "4429"
 WC_SEASON = "2026"
 
+# Jamoa nomi -> flagcdn ISO kodi (milliy terma bayroqlari)
+WC_FLAGS = {
+    "argentina": "ar", "australia": "au", "austria": "at", "belgium": "be", "bolivia": "bo",
+    "bosnia and herzegovina": "ba", "bosnia": "ba", "brazil": "br", "cameroon": "cm",
+    "canada": "ca", "chile": "cl", "colombia": "co", "costa rica": "cr", "croatia": "hr",
+    "curacao": "cw", "curaçao": "cw", "czech republic": "cz", "czechia": "cz", "denmark": "dk",
+    "ecuador": "ec", "egypt": "eg", "england": "gb-eng", "france": "fr", "germany": "de",
+    "ghana": "gh", "greece": "gr", "haiti": "ht", "honduras": "hn", "iran": "ir", "italy": "it",
+    "ivory coast": "ci", "cote d'ivoire": "ci", "côte d'ivoire": "ci", "jamaica": "jm",
+    "japan": "jp", "mexico": "mx", "morocco": "ma", "netherlands": "nl", "new zealand": "nz",
+    "nigeria": "ng", "norway": "no", "panama": "pa", "paraguay": "py", "peru": "pe",
+    "poland": "pl", "portugal": "pt", "qatar": "qa", "saudi arabia": "sa", "scotland": "gb-sct",
+    "senegal": "sn", "serbia": "rs", "slovakia": "sk", "south africa": "za", "south korea": "kr",
+    "korea republic": "kr", "spain": "es", "sweden": "se", "switzerland": "ch", "tunisia": "tn",
+    "turkey": "tr", "turkiye": "tr", "türkiye": "tr", "ukraine": "ua", "united states": "us",
+    "usa": "us", "uruguay": "uy", "wales": "gb-wls", "algeria": "dz", "cape verde": "cv",
+    "jordan": "jo", "uzbekistan": "uz", "germany ": "de",
+}
 
-def _tsdb(path: str) -> dict:
-    try:
-        return requests.get(f"{TSDB}/{path}", headers=UA_WEB, timeout=20).json() or {}
-    except Exception as e:
-        print("TheSportsDB xato:", e)
-        return {}
+
+def _flag_url(team: str):
+    code = WC_FLAGS.get((team or "").strip().lower())
+    return f"https://flagcdn.com/w80/{code}.png" if code else None
 
 
 def _match_time_uz(ts: str) -> str:
@@ -460,36 +481,80 @@ def _match_time_uz(ts: str) -> str:
         return "--:--"
 
 
-def get_fixtures(limit: int = 8) -> list:
+def _fd(path: str):
+    """football-data.org so'rovi (kalit bo'lsa). Xato/kalitsiz -> None."""
+    if not FOOTBALL_API_KEY:
+        return None
+    try:
+        r = requests.get(f"{FD_BASE}{path}", headers={"X-Auth-Token": FOOTBALL_API_KEY}, timeout=20)
+        if r.status_code == 200:
+            return r.json()
+        print(f"football-data.org {r.status_code}: {r.text[:120]}")
+    except Exception as e:
+        print("football-data.org xato:", e)
+    return None
+
+
+def _tsdb(path: str) -> dict:
+    try:
+        return requests.get(f"{TSDB}/{path}", headers=UA_WEB, timeout=20).json() or {}
+    except Exception as e:
+        print("TheSportsDB xato:", e)
+        return {}
+
+
+def get_fixtures(limit: int = 10) -> list:
+    d = _fd(f"/competitions/{FD_COMP}/matches?status=SCHEDULED")
+    if d and d.get("matches"):
+        ms = sorted(d["matches"], key=lambda m: m.get("utcDate", ""))[:limit]
+        return [{"home": m["homeTeam"]["name"], "away": m["awayTeam"]["name"],
+                 "hb": _flag_url(m["homeTeam"]["name"]), "ab": _flag_url(m["awayTeam"]["name"]),
+                 "time": _match_time_uz(m.get("utcDate", "")), "round": m.get("matchday")}
+                for m in ms]
     ev = _tsdb(f"eventsnextleague.php?id={WC_LEAGUE}").get("events") or []
-    out = []
-    for e in ev[:limit]:
-        out.append({"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
-                    "hb": e.get("strHomeTeamBadge"), "ab": e.get("strAwayTeamBadge"),
-                    "time": _match_time_uz(e.get("strTimestamp", "")),
-                    "round": e.get("intRound")})
-    return out
+    return [{"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
+             "hb": _flag_url(e.get("strHomeTeam", "")), "ab": _flag_url(e.get("strAwayTeam", "")),
+             "time": _match_time_uz(e.get("strTimestamp", "")), "round": e.get("intRound")}
+            for e in ev[:limit]]
 
 
-def get_results(limit: int = 8) -> list:
+def get_results(limit: int = 10) -> list:
+    d = _fd(f"/competitions/{FD_COMP}/matches?status=FINISHED")
+    if d and d.get("matches"):
+        ms = sorted(d["matches"], key=lambda m: m.get("utcDate", ""), reverse=True)[:limit]
+        return [{"home": m["homeTeam"]["name"], "away": m["awayTeam"]["name"],
+                 "hb": _flag_url(m["homeTeam"]["name"]), "ab": _flag_url(m["awayTeam"]["name"]),
+                 "hs": m["score"]["fullTime"].get("home"), "as": m["score"]["fullTime"].get("away"),
+                 "round": m.get("matchday")} for m in ms]
     ev = _tsdb(f"eventspastleague.php?id={WC_LEAGUE}").get("events") or []
-    out = []
-    for e in ev[:limit]:
-        out.append({"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
-                    "hb": e.get("strHomeTeamBadge"), "ab": e.get("strAwayTeamBadge"),
-                    "hs": e.get("intHomeScore"), "as": e.get("intAwayScore"),
-                    "round": e.get("intRound")})
-    return out
+    return [{"home": e.get("strHomeTeam", ""), "away": e.get("strAwayTeam", ""),
+             "hb": _flag_url(e.get("strHomeTeam", "")), "ab": _flag_url(e.get("strAwayTeam", "")),
+             "hs": e.get("intHomeScore"), "as": e.get("intAwayScore"), "round": e.get("intRound")}
+            for e in ev[:limit]]
 
 
 def get_standings() -> dict:
     """Guruh -> [{rank, team, badge, p, gd, pts}] (tartiblangan)."""
-    rows = _tsdb(f"lookuptable.php?l={WC_LEAGUE}&s={WC_SEASON}").get("table") or []
     groups: dict = {}
+    d = _fd(f"/competitions/{FD_COMP}/standings")
+    if d and d.get("standings"):
+        for s in d["standings"]:
+            if s.get("type") != "TOTAL":
+                continue
+            g = (s.get("group") or "").replace("GROUP_", "Group ").strip() or "—"
+            for r in s.get("table", []):
+                tm = r["team"]["name"]
+                groups.setdefault(g, []).append({
+                    "rank": r.get("position"), "team": tm, "badge": _flag_url(tm),
+                    "p": r.get("playedGames"), "gd": r.get("goalDifference"), "pts": r.get("points")})
+        if groups:
+            return dict(sorted(groups.items()))
+    rows = _tsdb(f"lookuptable.php?l={WC_LEAGUE}&s={WC_SEASON}").get("table") or []
     for r in rows:
         g = r.get("strGroup", "") or "—"
+        tm = r.get("strTeam", "")
         groups.setdefault(g, []).append({
-            "rank": r.get("intRank"), "team": r.get("strTeam", ""), "badge": r.get("strBadge"),
+            "rank": r.get("intRank"), "team": tm, "badge": _flag_url(tm),
             "p": r.get("intPlayed"), "gd": r.get("intGoalDifference"), "pts": r.get("intPoints")})
     for g in groups:
         groups[g].sort(key=lambda x: int(x["rank"] or 99))

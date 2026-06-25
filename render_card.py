@@ -1,4 +1,4 @@
-"""
+﻿"""
 Kunlik digest uchun rangli info-card (PNG) yasovchi modul (5 post uchun).
 
 Kartalar:
@@ -65,12 +65,12 @@ def _fmt_delta(delta):
 
 
 def _ellipsize(d, text, font, max_w):
-    """Matn max_w ga sig'masa, oxiriga "…" qo'yib qisqartiradi."""
+    """Matn max_w ga sig'masa, oxiriga "â€¦" qo'yib qisqartiradi."""
     if d.textlength(text, font=font) <= max_w:
         return text
-    while text and d.textlength(text + "…", font=font) > max_w:
+    while text and d.textlength(text + "â€¦", font=font) > max_w:
         text = text[:-1]
-    return text + "…"
+    return text + "â€¦"
 
 
 def _font(name, size):
@@ -419,7 +419,7 @@ def render_weather_card(date_label, weather, out_path="weather.png", channel_lab
 def render_currency_overview_card(date_label, rows, out_path="rates.png", channel_label="", prev=None):
     """rows: [{"code","name","unit","rate","value"}, ...] (USD birinchi).
 
-    prev: {code: oldingi_qiymat} -> kunlik o'zgarish (▲ yashil / ▼ qizil) ko'rsatiladi.
+    prev: {code: oldingi_qiymat} -> kunlik o'zgarish (â–² yashil / â–¼ qizil) ko'rsatiladi.
     """
     prev = prev or {}
     W, pad, row_h = 900, 40, 66
@@ -450,7 +450,7 @@ def render_currency_overview_card(date_label, rows, out_path="rates.png", channe
         val = r.get("value")
         delta = (val - prev[r["code"]]) if (val is not None and r["code"] in prev) else None
         if delta is None or abs(delta) < 0.005:
-            d.text((chg_right - d.textlength("—", font=f_chg), cy - 13), "—",
+            d.text((chg_right - d.textlength("â€”", font=f_chg), cy - 13), "â€”",
                    font=f_chg, fill=MUTED)
         else:
             up = delta > 0
@@ -658,11 +658,11 @@ def _badge(url, h):
 
 def _tname(n, maxlen=14):
     n = n or ""
-    return n if len(n) <= maxlen else n[:maxlen - 1] + "…"
+    return n if len(n) <= maxlen else n[:maxlen - 1] + "â€¦"
 
 
 def _match_row(img, d, y, row_h, m, center):
-    """Bitta o'yin qatori: vaqt | [logo] Uy — Mehmon [logo]. center = '—' yoki hisob."""
+    """Bitta o'yin qatori: vaqt | [logo] Uy â€” Mehmon [logo]. center = 'â€”' yoki hisob."""
     W, pad = 900, 40
     mid = W // 2
     cy = y + (row_h - 8) // 2
@@ -692,15 +692,15 @@ def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_l
     img, d = _new(W, H)
     _header(img, W, pad, "Bugungi o'yinlar", date_label, GREEN, "ball")
     y = pad + 96 + 40
-    d.text((pad + 4, y), "JCH-2026 · vaqtlar Toshkent bo'yicha", font=R(22), fill=MUTED)
+    d.text((pad + 4, y), "JCH-2026 Â· vaqtlar Toshkent bo'yicha", font=R(22), fill=MUTED)
     y += 40
     if not matches:
         d.text((pad + 6, y), "Yaqin kunlarda o'yin yo'q.", font=R(26), fill=MUTED)
     for m in matches:
         _panel(img, (pad, y, W - pad, y + row_h - 8), 12, CARD, blur=10, dy=4, alpha=80)
-        _match_row(img, d, y, row_h, m, "—")
+        _match_row(img, d, y, row_h, m, "â€”")
         y += row_h
-    _footer(d, W, H, pad, channel_label, "Manba: TheSportsDB")
+    _footer(d, W, H, pad, channel_label, "Manba: football-data.org")
     img.save(out_path)
     return out_path
 
@@ -711,7 +711,7 @@ def render_results_card(date_label, matches, out_path="results.png", channel_lab
     img, d = _new(W, H)
     _header(img, W, pad, "Natijalar", date_label, GOLD, "ball")
     y = pad + 96 + 40
-    d.text((pad + 4, y), "JCH-2026 · so'nggi o'yinlar hisobi", font=R(22), fill=MUTED)
+    d.text((pad + 4, y), "JCH-2026 Â· so'nggi o'yinlar hisobi", font=R(22), fill=MUTED)
     y += 40
     if not matches:
         d.text((pad + 6, y), "So'nggi natijalar topilmadi.", font=R(26), fill=MUTED)
@@ -720,7 +720,7 @@ def render_results_card(date_label, matches, out_path="results.png", channel_lab
         score = f"{m.get('hs', '')} : {m.get('as', '')}"
         _match_row(img, d, y, row_h, m, score)
         y += row_h
-    _footer(d, W, H, pad, channel_label, "Manba: TheSportsDB")
+    _footer(d, W, H, pad, channel_label, "Manba: football-data.org")
     img.save(out_path)
     return out_path
 
@@ -763,7 +763,7 @@ def render_standings_card(date_label, groups, out_path="standings.png", channel_
                 d.text((cx + colw - 42, y), str(r.get("pts", "")), font=B(22), fill=TEXT)
                 y += 32
             y += 22
-    _footer(d, W, H, pad, channel_label, "Manba: TheSportsDB")
+    _footer(d, W, H, pad, channel_label, "Manba: football-data.org")
     img.save(out_path)
     return out_path
 
