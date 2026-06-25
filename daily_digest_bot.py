@@ -43,8 +43,51 @@ from render_card import (
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
 # Bo'lmasa -> oddiy shablon ishlatiladi (bepul, hammasi baribir ishlaydi).
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHANNEL = os.environ["TELEGRAM_CHANNEL"]
+# Token/kanal: bitta kanal bo'lsa env'dan; ko'p kanal bo'lsa channels.json'dan
+# (har kanal uchun run_channel() ichida qayta o'rnatiladi). .get -> import qulashmaydi.
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHANNEL = os.environ.get("TELEGRAM_CHANNEL", "")
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+CHANNEL_KEY = "default"        # joriy kanal kaliti (state/<key>/ papkasi uchun)
+# Footer'dagi xizmatlar qatori (har kanal config'dan o'zgartirishi mumkin).
+FOOTER_SERVICES = "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
+
+
+def _sp(name: str) -> str:
+    """Joriy kanal uchun state fayli yo'li: state/<kanal>/<name>."""
+    return os.path.join(HERE, "state", CHANNEL_KEY, name)
+
+
+def load_channels() -> list:
+    """channels.json'dan kanallar ro'yxati. Bo'lmasa -> env'dan bitta kanal (orqaga moslik).
+
+    Har kanal: {channel, token_env, groups, footer_services?, name?}.
+    Tokenlar channels.json'ga YOZILMAYDI -> token_env faqat secret/env NOMINI bildiradi.
+    """
+    p = os.path.join(HERE, "channels.json")
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        chans = [c for c in data if c.get("channel")]
+        if chans:
+            return chans
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print("channels.json o'qishda xato:", e)
+    return [{"channel": TELEGRAM_CHANNEL, "token_env": "TELEGRAM_BOT_TOKEN",
+             "groups": ["A", "B", "C", "D", "M"]}]
+
+
+def _apply_channel(cfg: dict) -> None:
+    """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
+    global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES
+    TELEGRAM_CHANNEL = cfg["channel"]
+    TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
+                                        os.environ.get("TELEGRAM_BOT_TOKEN", ""))
+    CHANNEL_KEY = re.sub(r"[^A-Za-z0-9_]", "_", str(cfg["channel"]).lstrip("@")) or "default"
+    FOOTER_SERVICES = cfg.get("footer_services", "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar")
 
 UA = {"User-Agent": "Mozilla/5.0 (digest-bot)"}
 # Maqola sahifalaridan rasm (og:image) olishda haqiqiy brauzer UA ishonchliroq.
@@ -466,9 +509,8 @@ def make_instant_view(item) -> str | None:
 
 
 # ------------------------------------------------------------------ TEZKOR XABAR (holat)
-# Allaqachon post qilingan xabarlar ro'yxati shu faylda saqlanadi (takror oldini olish).
-# GitHub Actions har ish oxirida bu faylni repoga commit qiladi.
-_STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "posted_news.json")
+# Holat fayllari har kanal uchun alohida: state/<kanal>/... (takror, kunlik belgi, kurslar).
+# GitHub Actions har ish oxirida state/ ni repoga commit qiladi.
 MAX_ALERTS = 2        # bitta ishda ko'pi bilan necha yangi xabar post qilinadi
 STATE_KEEP = 200      # holatda saqlanadigan oxirgi yozuvlar soni
 
@@ -477,84 +519,54 @@ def _news_key(item: dict) -> str:
     return (item.get("link") or item.get("title") or "").strip()
 
 
-def load_posted() -> list[str]:
+def _load_json(name, default):
     try:
-        with open(_STATE_PATH, encoding="utf-8") as f:
+        with open(_sp(name), encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        return []
+        return default
 
 
-def save_posted(keys: list[str]) -> None:
+def _save_json(name, data):
     try:
-        os.makedirs(os.path.dirname(_STATE_PATH), exist_ok=True)
-        with open(_STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(keys[-STATE_KEEP:], f, ensure_ascii=False, indent=0)
+        os.makedirs(os.path.dirname(_sp(name)), exist_ok=True)
+        with open(_sp(name), "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=0)
     except Exception as e:
-        print("Holatni saqlashda xato:", e)
+        print(f"Holat saqlashda xato ({name}):", e)
 
 
-# Kunlik postlar (A/B/D) qaysi sanada chiqarilganini saqlaydi (kuniga bir marta).
-_DAILY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "posted_daily.json")
+def load_posted() -> list:
+    return _load_json("posted_news.json", [])
+
+
+def save_posted(keys: list) -> None:
+    _save_json("posted_news.json", keys[-STATE_KEEP:])
 
 
 def load_daily() -> dict:
-    try:
-        with open(_DAILY_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return _load_json("posted_daily.json", {})
 
 
 def save_daily(state: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(_DAILY_PATH), exist_ok=True)
-        with open(_DAILY_PATH, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=0)
-    except Exception as e:
-        print("Kunlik holatni saqlashda xato:", e)
-
-
-# Oldingi (kechagi) rasmiy kurslar -> kunlik o'zgarishni (▲/▼) hisoblash uchun.
-_RATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "prev_rates.json")
+    _save_json("posted_daily.json", state)
 
 
 def load_prev_rates() -> dict:
-    try:
-        with open(_RATES_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return _load_json("prev_rates.json", {})
 
 
 def save_prev_rates(rates: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(_RATES_PATH), exist_ok=True)
-        with open(_RATES_PATH, "w", encoding="utf-8") as f:
-            json.dump(rates, f, ensure_ascii=False, indent=0)
-    except Exception as e:
-        print("Kurs holatini saqlashda xato:", e)
+    _save_json("prev_rates.json", rates)
 
 
 # Oltin narxining kunlik o'zgarishini hisoblash uchun (kechagi qiymat).
-_MARKET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state", "prev_market.json")
-
-
 def load_prev_market() -> dict:
-    try:
-        with open(_MARKET_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return _load_json("prev_market.json", {})
 
 
 def save_prev_market(state: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(_MARKET_PATH), exist_ok=True)
-        with open(_MARKET_PATH, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=0)
-    except Exception as e:
-        print("Bozor holatini saqlashda xato:", e)
+    _save_json("prev_market.json", state)
 
 
 # ------------------------------------------------------------------ BUGUN (taqvim)
@@ -653,7 +665,7 @@ def _channel_footer() -> str:
     uname = ch[1:]
     link = f'<a href="https://t.me/{uname}">{ch}</a>'
     return ("\n\n━━━━━━━━━━━━━━"
-            "\n🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
+            f"\n{FOOTER_SERVICES}"
             f"\n👉 {link} — obuna bo'ling 🔔 · ulashing 📢")
 
 
@@ -1002,7 +1014,7 @@ def daily_due(group: str, now, daily_state: dict) -> bool:
     if target is None:
         return False
     cur = now.hour + now.minute / 60.0
-    return target + _jitter_h(now, group) <= cur <= target + MAX_DELAY_HOURS
+    return target + _jitter_h(now, f"{group}|{CHANNEL_KEY}") <= cur <= target + MAX_DELAY_HOURS
 
 
 # Kurslar/Dollar kuniga bir necha marta chiqadi (kurs kun davomida o'zgaradi).
@@ -1018,41 +1030,29 @@ def due_slots(now, daily_state: dict) -> list:
     for i, slot in enumerate(D_SLOTS):
         if daily_state.get(f"D{i}") == today:
             continue
-        if slot + _jitter_h(now, f"D{i}") <= cur <= slot + SLOT_WINDOW:
+        if slot + _jitter_h(now, f"D{i}|{CHANNEL_KEY}") <= cur <= slot + SLOT_WINDOW:
             out.append(i)
     return out
 
 
-def main() -> None:
-    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
-    date_label = f"{now.day}-{UZ_MONTHS[now.month]}"   # qisqa: yil/hafta kuni yo'q
+def run_channel(now, date_label, group, cfg) -> list:
+    """Bitta kanal uchun postlarni bajaradi (kontekst _apply_channel orqali o'rnatilgan).
+
+    cfg["groups"] -> shu kanal qaysi turdagi postlarni oladi (A/B/C/D/M)."""
     ch = str(TELEGRAM_CHANNEL)
-
-    # POST_GROUP rejimlari:
-    #   AUTO = heartbeat (har 15 daq): vaqti kelgan kunlik postlar (A/B/D) + tezkor (C).
-    #          Aniq cron'ga ishonmaydi -> GitHub kechikishiga chidamli.
-    #   A = Bugun + Kun maslahati (~07:00) | B = Ob-havo (~07:30)
-    #   C = Tezkor xabarlar (real-vaqt)   | D = Kurslar + Dollar (~10:00)
-    #   M = Bozor: oltin + kripto (~11:00) | ALL = hammasi (qo'lda test)
-    group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
-
-    # Darvoza: faol oynadan tashqarida (masalan tunda) post tashlamaymiz. Xato emas -> exit 0.
-    if not within_window(group, now):
-        clock = f"{now.hour:02d}:{now.minute:02d}"
-        print(f"Guruh {group}: faol oynadan tashqarida (hozir {clock} "
-              f"Toshkent). Post tashlanmadi. Majburlash uchun FORCE_POST=1.")
-        return
-
+    groups_on = set(cfg.get("groups", ["A", "B", "C", "D", "M"]))
     today = now.strftime("%Y-%m-%d")
     daily_state = load_daily() if group == "AUTO" else {}
 
     if group == "AUTO":
         # heartbeat: tezkor (C) doim, kunlik (A/B/M) bir marta, D (kurslar) kuniga 3 marta
-        d_due = due_slots(now, daily_state)
-        due = {"C"} | {g for g in ("A", "B", "M") if daily_due(g, now, daily_state)}
+        d_due = due_slots(now, daily_state) if "D" in groups_on else []
+        due = {g for g in ("A", "B", "M") if g in groups_on and daily_due(g, now, daily_state)}
+        if "C" in groups_on:
+            due.add("C")
         if d_due:
             due.add("D")
-        print(f"AUTO (hozir {now.hour:02d}:{now.minute:02d}) -> chiqariladigan: {sorted(due)}"
+        print(f"  [{ch}] {now.hour:02d}:{now.minute:02d} -> {sorted(due)}"
               + (f" (D-slot {d_due})" if d_due else ""))
 
         def want(g):
@@ -1060,7 +1060,7 @@ def main() -> None:
     else:
         d_due = [0]   # qo'lda: D bir marta
         def want(g):
-            return group == "ALL" or group == g
+            return (group == "ALL" or group == g) and g in groups_on
 
     results = []
     done_today = []        # AUTO: bugun chiqarilgan kunlik guruhlar (A/B/M)
@@ -1153,11 +1153,33 @@ def main() -> None:
         for g in done_today:
             daily_state[g] = today
         save_daily(daily_state)
+    return results
+
+
+def main() -> None:
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
+    date_label = f"{now.day}-{UZ_MONTHS[now.month]}"   # qisqa: yil/hafta kuni yo'q
+    # POST_GROUP: AUTO (heartbeat har 15 daq) | A/B/C/D/M | ALL (qo'lda test)
+    group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
+
+    # Darvoza: faol oynadan tashqarida (tunda) -> hech kanalga post yo'q. Xato emas (exit 0).
+    if not within_window(group, now):
+        print(f"Guruh {group}: faol oynadan tashqarida ({now.hour:02d}:{now.minute:02d} "
+              f"Toshkent). Post yo'q. Majburlash: FORCE_POST=1.")
+        return
+
+    channels = load_channels()
+    print(f"Guruh {group} | Kanallar soni: {len(channels)}")
+    results = []
+    for cfg in channels:
+        try:
+            _apply_channel(cfg)
+            results += run_channel(now, date_label, group, cfg)
+        except Exception as e:
+            print(f"Kanal {cfg.get('channel')} XATO: {e}")
 
     ok = sum(results)
-    print(f"\nGuruh: {group} | Natija: {ok}/{len(results)} post yuborildi.")
-    # Faqat haqiqiy post xatosi bo'lsa 1 bilan chiqamiz. Hech post bo'lmasligi
-    # (masalan tezkor kuzatuvchida yangi xabar yo'qligi) -> normal holat (exit 0).
+    print(f"\nGuruh: {group} | Jami natija: {ok}/{len(results)} post yuborildi.")
     if results and ok < len(results):
         import sys
         sys.exit(1)

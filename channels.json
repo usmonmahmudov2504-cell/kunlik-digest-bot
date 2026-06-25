@@ -1,0 +1,9 @@
+[
+  {
+    "name": "Ajoyib Kun | Bugun",
+    "channel": "@ajoyib_kun_uz",
+    "token_env": "TELEGRAM_BOT_TOKEN",
+    "groups": ["A", "B", "C", "D", "M"],
+    "footer_services": "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
+  }
+]
