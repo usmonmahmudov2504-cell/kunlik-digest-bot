@@ -21,6 +21,6 @@
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["D", "M", "B"],
     "slots": {"D": [9.0, 12.0, 15.0, 18.0], "M": [11.0, 17.0]},
-    "footer_services": "💵 Valyuta · 🏦 Banklar · 🪙 Oltin · ₿ Kripto"
+    "footer_services": "💵 Valyuta · 🏦 Banklar kurslari"
   }
 ]
