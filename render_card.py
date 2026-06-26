@@ -168,11 +168,13 @@ def _draw_icon(d, kind, box, color):
             yy = cy - s * 0.22 + frac * s * 0.66
             x_end = x1 - s * 0.22 if i < 2 else cx + s * 0.05
             d.line((x0 + s * 0.22, yy, x_end, yy), fill=color, width=lw)
-    elif kind == "rates":                                   # tangalar (ustma-ust ellips)
-        for i, oy in enumerate((0.22, 0.0, -0.22)):
-            ey = cy + s * oy
-            d.ellipse((cx - s * 0.26, ey - s * 0.10, cx + s * 0.26, ey + s * 0.10),
-                      outline=color, width=lw)
+    elif kind == "rates":                                   # tanga ($ belgili) -> pul/valyuta
+        r = s * 0.30
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=color, width=lw)
+        f = B(int(s * 0.46))
+        bb = d.textbbox((0, 0), "$", font=f)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        d.text((cx - tw / 2 - bb[0], cy - th / 2 - bb[1]), "$", font=f, fill=color)
     elif kind == "currency":                                # banknot
         d.rounded_rectangle((cx - s * 0.30, cy - s * 0.18, cx + s * 0.30, cy + s * 0.18),
                             radius=s * 0.05, outline=color, width=lw)
