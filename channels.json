@@ -14,5 +14,13 @@
     "news_preset": "football",
     "translate": "uz",
     "footer_services": "⚽ Jahon futboli · 🇺🇿 O'zbekiston · 📊 Natijalar"
+  },
+  {
+    "name": "Dollar Kursi | Bugun",
+    "channel": "@DollarKursis",
+    "token_env": "TELEGRAM_BOT_TOKEN",
+    "groups": ["D", "M", "B"],
+    "slots": {"D": [9.0, 12.0, 15.0, 18.0], "M": [11.0, 17.0]},
+    "footer_services": "💵 Valyuta · 🏦 Banklar · 🪙 Oltin · ₿ Kripto"
   }
 ]

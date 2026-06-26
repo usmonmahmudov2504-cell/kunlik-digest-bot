@@ -287,9 +287,21 @@ def _fmt_usd(v: float) -> str:
     return f"{v:,.2f}".replace(",", " ").replace(".", ",")
 
 
+# Ko'rsatiladigan coinlar: (CoinGecko id, ichki kalit, ko'rinadigan nom, belgi).
+# Tartib shu yerda -> kartada ham shu tartibda chiqadi (BTC, ETH, TON, BNB, SOL, XRP).
+COINS = [
+    ("bitcoin", "btc", "Bitcoin", "BTC"),
+    ("ethereum", "eth", "Ethereum", "ETH"),
+    ("the-open-network", "ton", "Toncoin", "TON"),
+    ("binancecoin", "bnb", "BNB", "BNB"),
+    ("solana", "sol", "Solana", "SOL"),
+    ("ripple", "xrp", "XRP", "XRP"),
+]
+
+
 def get_market_data() -> dict:
-    """Oltin (XAU $/oz) + Bitcoin/Ethereum ($, 24h%) + USD/UZS (gramm so'm uchun)."""
-    out = {"gold": None, "btc": None, "eth": None, "usd_uzs": None}
+    """Oltin (XAU $/oz) + coinlar ($, 24h%) + USD/UZS (gramm so'm uchun)."""
+    out = {"gold": None, "usd_uzs": None}
     try:
         data = requests.get("https://cbu.uz/uz/arkhiv-kursov-valyut/json/", headers=UA, timeout=15).json()
         for it in data:
@@ -304,13 +316,16 @@ def get_market_data() -> dict:
     except Exception as e:
         print("Oltin narxi xato:", e)
     try:
+        ids = ",".join(c[0] for c in COINS)
+        id2key = {c[0]: c[1] for c in COINS}
         c = requests.get(
-            "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum",
+            f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={ids}",
             headers=UA_WEB, timeout=20).json()
         for coin in c:
-            key = "btc" if coin.get("id") == "bitcoin" else "eth"
-            out[key] = {"usd": float(coin["current_price"]),
-                        "chg": coin.get("price_change_percentage_24h")}
+            key = id2key.get(coin.get("id"))
+            if key:
+                out[key] = {"usd": float(coin["current_price"]),
+                            "chg": coin.get("price_change_percentage_24h")}
     except Exception as e:
         print("Kripto narxi xato:", e)
     return out
@@ -327,12 +342,11 @@ def market_rows(m: dict, prev_gold=None) -> list[dict]:
         chg = ((m["gold"] - prev_gold) / prev_gold * 100) if prev_gold else None
         rows.append({"name": "Oltin", "sub": sub, "value": f"${_fmt_usd(m['gold'])}",
                      "chg": chg, "kind": "gold"})
-    if m.get("btc"):
-        rows.append({"name": "Bitcoin", "sub": "BTC", "value": f"${_fmt_usd(m['btc']['usd'])}",
-                     "chg": m["btc"].get("chg"), "kind": "btc"})
-    if m.get("eth"):
-        rows.append({"name": "Ethereum", "sub": "ETH", "value": f"${_fmt_usd(m['eth']['usd'])}",
-                     "chg": m["eth"].get("chg"), "kind": "eth"})
+    for _id, key, name, sub in COINS:
+        c = m.get(key)
+        if c:
+            rows.append({"name": name, "sub": sub, "value": f"${_fmt_usd(c['usd'])}",
+                         "chg": c.get("chg"), "kind": key})
     return rows
 
 
@@ -1399,15 +1413,18 @@ D_SLOTS = (9.5, 13.0, 17.0)              # mo'ljal vaqtlari (Toshkent) -> 3 mart
 SLOT_WINDOW = 2.0                        # har slot oynasi (slotlar 3.5+ soat oralig'ida -> ustma-ust emas)
 
 
-def due_slots(now, daily_state: dict) -> list:
-    """Bugun hali chiqmagan va vaqti kelgan D (kurslar) slotlari indekslari."""
+def due_multi(group: str, now, daily_state: dict, slots) -> list:
+    """Ko'p slotli guruh (D/M...) uchun: bugun hali chiqmagan va vaqti kelgan slot indekslari.
+
+    Holatda har slot alohida belgilanadi: "<group><i>" (mas. "D0", "M1").
+    """
     cur = now.hour + now.minute / 60.0
     today = now.strftime("%Y-%m-%d")
     out = []
-    for i, slot in enumerate(D_SLOTS):
-        if daily_state.get(f"D{i}") == today:
+    for i, slot in enumerate(slots):
+        if daily_state.get(f"{group}{i}") == today:
             continue
-        if slot + _jitter_h(now, f"D{i}|{CHANNEL_KEY}") <= cur <= slot + SLOT_WINDOW:
+        if slot + _jitter_h(now, f"{group}{i}|{CHANNEL_KEY}") <= cur <= slot + SLOT_WINDOW:
             out.append(i)
     return out
 
@@ -1418,14 +1435,23 @@ def run_channel(now, date_label, group, cfg) -> list:
     cfg["groups"] -> shu kanal qaysi turdagi postlarni oladi (A/B/C/D/M)."""
     ch = str(TELEGRAM_CHANNEL)
     groups_on = set(cfg.get("groups", ["A", "B", "C", "D", "M"]))
+    slots_cfg = cfg.get("slots", {})        # har-kanal jadval: {"D":[...], "M":[...]}
     today = now.strftime("%Y-%m-%d")
     daily_state = load_daily() if group == "AUTO" else {}
 
     if group == "AUTO":
-        # heartbeat: tezkor (C) doim, kunlik (A/B/M) bir marta, D (kurslar) kuniga 3 marta
-        d_due = due_slots(now, daily_state) if "D" in groups_on else []
-        due = {g for g in ("A", "B", "M", "F", "R", "S")
+        # heartbeat: tezkor (C) doim, kunlik (A/B/F/R/S) bir marta, ko'p slotlilar jadval bo'yicha
+        d_slots = slots_cfg.get("D", list(D_SLOTS))   # standart: D kuniga 3 marta
+        m_slots = slots_cfg.get("M")                  # bo'lsa M ko'p marta; bo'lmasa kuniga 1
+        d_due = due_multi("D", now, daily_state, d_slots) if "D" in groups_on else []
+        m_due = due_multi("M", now, daily_state, m_slots) if (m_slots and "M" in groups_on) else []
+        due = {g for g in ("A", "B", "F", "R", "S")
                if g in groups_on and daily_due(g, now, daily_state)}
+        # M: slotli kanal -> m_due; aks holda kuniga bir marta (daily_due)
+        if "M" in groups_on and not m_slots and daily_due("M", now, daily_state):
+            due.add("M")
+        if m_due:
+            due.add("M")
         if "C" in groups_on:
             due.add("C")
         if "G" in groups_on:
@@ -1433,12 +1459,14 @@ def run_channel(now, date_label, group, cfg) -> list:
         if d_due:
             due.add("D")
         print(f"  [{ch}] {now.hour:02d}:{now.minute:02d} -> {sorted(due)}"
-              + (f" (D-slot {d_due})" if d_due else ""))
+              + (f" (D-slot {d_due})" if d_due else "")
+              + (f" (M-slot {m_due})" if m_due else ""))
 
         def want(g):
             return g in due
     else:
         d_due = [0]   # qo'lda: D bir marta
+        m_due = [0]   # qo'lda: M bir marta
         def want(g):
             return (group == "ALL" or group == g) and g in groups_on
 
@@ -1566,7 +1594,13 @@ def run_channel(now, date_label, group, cfg) -> list:
                 save_prev_market({"gold": m["gold"]})
         else:
             print("Bozor ma'lumoti topilmadi.")
-        done_today.append("M")
+        if group == "AUTO":
+            if m_due:                      # slotli kanal -> har slotni alohida belgilaymiz
+                for i in m_due:
+                    daily_state[f"M{i}"] = today
+                state_changed = True
+            else:
+                done_today.append("M")     # kuniga bir marta
 
     # --- F guruh: Bugungi o'yinlar (JCH-2026) ---
     if want("F"):

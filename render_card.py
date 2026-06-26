@@ -590,7 +590,9 @@ def render_advice_card(date_label, kind, text, out_path="advice.png", channel_la
 
 
 # ============================================================ 7) BOZOR (oltin + kripto)
-_MK_COLOR = {"gold": GOLD, "btc": (234, 88, 12), "eth": (79, 70, 229)}
+_MK_COLOR = {"gold": GOLD, "btc": (234, 88, 12), "eth": (79, 70, 229),
+             "ton": (0, 136, 204), "bnb": (216, 160, 8),
+             "sol": PURPLE, "xrp": (51, 65, 85)}
 
 
 def render_market_card(date_label, rows, out_path="market.png", channel_label=""):
