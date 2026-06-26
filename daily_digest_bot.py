@@ -1202,15 +1202,36 @@ def standings_caption(date_label, groups) -> str:
     return _finish(parts)
 
 
-def goal_caption(m) -> str:
-    """Real-vaqt GOOOL posti (matnli, tez)."""
+def goal_caption(m, scorer="", scored="") -> str:
+    """GOOOL posti (batafsil): qaysi jamoa, hisob, muallif, daqiqa, guruh."""
     he, ae = m.get("he", ""), m.get("ae", "")
-    parts = ["⚽️ <b>GOOOL!</b>", "",
-             f"{he} <b>{m['home']} {m['hs']} : {m['as']} {m['away']}</b> {ae}".strip()]
+    parts = ["⚽️ <b>GOOOL!</b>", ""]
+    if scored:
+        parts.append(f"🔥 <b>{scored}</b> gol urdi!")
+        parts.append("")
+    parts.append(f"{he} <b>{m['home']} {m['hs']} : {m['as']} {m['away']}</b> {ae}".strip())
+    if scorer:
+        parts.append(f"⚽️ Gol muallifi: <b>{scorer}</b>")
     if m.get("minute"):
         parts.append(f"⏱ {m['minute']}-daqiqa")
-    parts += ["", "#JCH2026 #Gol #Futbol"]
-    return _finish(parts)
+    parts.append("🏆 JCH-2026")
+    text = "\n".join(p for p in parts if p is not None)
+    ch = str(TELEGRAM_CHANNEL).strip()
+    if ch.startswith("@"):
+        text += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+                 " · obuna bo'ling \U0001F514")
+    return text
+
+
+def get_match_goals(match_id) -> list:
+    """FD match detali -> gollar [{minute, scorer, team}]. Bo'lmasa []."""
+    d = _fd(f"/matches/{match_id}") or {}
+    out = []
+    for g in d.get("goals", []) or []:
+        out.append({"minute": g.get("minute"),
+                    "scorer": (g.get("scorer") or {}).get("name", ""),
+                    "team": (g.get("team") or {}).get("name", "")})
+    return out
 
 
 # ------------------------------------------------------------------ TELEGRAM
@@ -1482,8 +1503,22 @@ def run_channel(now, date_label, group, cfg) -> list:
             # birinchi ko'rishda jim (mavjud hisobni e'lon qilmaymiz); keyin gol bo'lsa post
             if old is not None and cur_sum > old.get("sum", 0):
                 try:
-                    img = render_goal_card(m, "p11.png", ch)
-                    post_photo(img, goal_caption(m))
+                    # qaysi jamoa gol urdi (eski hisob bilan solishtirib)
+                    oh, oa = (old.get("s", "0-0").split("-") + ["0", "0"])[:2]
+                    scored = m["home"] if m["hs"] > int(oh or 0) else m["away"]
+                    # gol muallifi (FD detalidan, bo'lsa)
+                    scorer = ""
+                    gs = get_match_goals(m.get("id"))
+                    if gs:
+                        scorer = gs[-1].get("scorer", "")
+                        if gs[-1].get("minute"):
+                            m["minute"] = gs[-1]["minute"]
+                    # tayyor GOOOL rasmi (assets/goal.*) bo'lsa shuni, bo'lmasa rendered karta
+                    fixed = next((p for p in (
+                        os.path.join(HERE, "assets", "goal.png"),
+                        os.path.join(HERE, "assets", "goal.jpg")) if os.path.exists(p)), None)
+                    img = fixed or render_goal_card(m, "p11.png", ch)
+                    post_photo(img, goal_caption(m, scorer=scorer, scored=scored))
                     print(f"GOOOL ✓ {m['home']} {m['hs']}-{m['as']} {m['away']}")
                     results.append(True)
                 except Exception as e:
