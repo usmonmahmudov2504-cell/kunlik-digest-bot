@@ -1278,10 +1278,14 @@ def post_breaking(item, translate=None) -> bool:
             title = translate_to_uz(title)
             if desc:
                 desc = translate_to_uz(desc[:300])
-        # Caption: faqat sarlavha (+ qisqa tavsif bo'lsa) \u2014 ortiqcha yozuv yo'q
+        # Caption: sarlavha (+ qisqa tavsif) + bitta toza kanal qatori
         cap = f"\u26a1 <b>{html.escape(title, quote=False)}</b>"
         if desc:
             cap += f"\n\n{html.escape(desc[:400], quote=False)}"
+        ch = str(TELEGRAM_CHANNEL).strip()
+        if ch.startswith("@"):
+            cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+                    " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
         # Instant View sahifasi + pastdagi tugma
         iv_url = make_instant_view(item) or link
         button = ({"inline_keyboard": [[{"text": "\u26a1 Instant View", "url": iv_url}]]}
