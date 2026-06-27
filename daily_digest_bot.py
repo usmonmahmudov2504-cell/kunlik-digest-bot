@@ -786,30 +786,40 @@ def _mk_match(hn, an, time=None, hs=None, as_=None, rnd=None):
     return d
 
 
+def _fd_named(m: dict) -> bool:
+    """FD o'yinida ikkala jamoa ham aniq (TBD/placeholder — bo'sh nom — emas)."""
+    return bool((m.get("homeTeam") or {}).get("name") and (m.get("awayTeam") or {}).get("name"))
+
+
 def get_fixtures(limit: int = 10) -> list:
     d = _fd(f"/competitions/{FD_COMP}/matches?status=SCHEDULED")
     if d and d.get("matches"):
-        ms = sorted(d["matches"], key=lambda m: m.get("utcDate", ""))[:limit]
+        # Avval bo'sh jamoali (TBD) o'yinlarni chiqaramiz, KEYIN limit -> haqiqiy o'yin yo'qolmaydi
+        ms = [m for m in sorted(d["matches"], key=lambda m: m.get("utcDate", ""))
+              if _fd_named(m)][:limit]
         return [_mk_match(m["homeTeam"]["name"], m["awayTeam"]["name"],
                           time=_match_time_uz(m.get("utcDate", "")), rnd=m.get("matchday"))
                 for m in ms]
-    ev = _tsdb(f"eventsnextleague.php?id={WC_LEAGUE}").get("events") or []
+    ev = [e for e in (_tsdb(f"eventsnextleague.php?id={WC_LEAGUE}").get("events") or [])
+          if e.get("strHomeTeam") and e.get("strAwayTeam")][:limit]
     return [_mk_match(e.get("strHomeTeam", ""), e.get("strAwayTeam", ""),
                       time=_match_time_uz(e.get("strTimestamp", "")), rnd=e.get("intRound"))
-            for e in ev[:limit]]
+            for e in ev]
 
 
 def get_results(limit: int = 10) -> list:
     d = _fd(f"/competitions/{FD_COMP}/matches?status=FINISHED")
     if d and d.get("matches"):
-        ms = sorted(d["matches"], key=lambda m: m.get("utcDate", ""), reverse=True)[:limit]
+        ms = [m for m in sorted(d["matches"], key=lambda m: m.get("utcDate", ""), reverse=True)
+              if _fd_named(m)][:limit]
         return [_mk_match(m["homeTeam"]["name"], m["awayTeam"]["name"],
                           hs=m["score"]["fullTime"].get("home"), as_=m["score"]["fullTime"].get("away"),
                           rnd=m.get("matchday")) for m in ms]
-    ev = _tsdb(f"eventspastleague.php?id={WC_LEAGUE}").get("events") or []
+    ev = [e for e in (_tsdb(f"eventspastleague.php?id={WC_LEAGUE}").get("events") or [])
+          if e.get("strHomeTeam") and e.get("strAwayTeam")][:limit]
     return [_mk_match(e.get("strHomeTeam", ""), e.get("strAwayTeam", ""),
                       hs=e.get("intHomeScore"), as_=e.get("intAwayScore"), rnd=e.get("intRound"))
-            for e in ev[:limit]]
+            for e in ev]
 
 
 def get_standings() -> dict:
@@ -1335,9 +1345,10 @@ def market_caption(date_label, rows) -> str:
 def fixtures_caption(date_label, matches) -> str:
     parts = [f"⚽ <b>Bugungi o'yinlar</b> — {date_label}", "",
              "<i>JCH-2026 · Toshkent vaqti</i>", ""]
-    for m in matches[:10]:
+    shown = [m for m in matches if m.get("home") and m.get("away")][:10]   # bo'sh jamoa -> tashlab ketamiz
+    for m in shown:
         parts.append(f"🕐 <b>{m['time']}</b>  {m['home']} — {m['away']}")
-    if not matches:
+    if not shown:
         parts.append("Yaqin kunlarda o'yin yo'q.")
     parts.append("")
     parts.append("📋 To'liq jadval — rasmda ⬆️")
@@ -1349,9 +1360,10 @@ def fixtures_caption(date_label, matches) -> str:
 def results_caption(date_label, matches) -> str:
     parts = [f"📊 <b>Natijalar</b> — {date_label}", "",
              "<i>JCH-2026 · so'nggi o'yinlar</i>", ""]
-    for m in matches[:10]:
+    shown = [m for m in matches if m.get("home") and m.get("away")][:10]
+    for m in shown:
         parts.append(f"⚽ {m['home']} <b>{m.get('hs', '')}:{m.get('as', '')}</b> {m['away']}")
-    if not matches:
+    if not shown:
         parts.append("So'nggi natijalar topilmadi.")
     parts.append("")
     parts.append("#Futbol #JCH2026 #Natijalar")

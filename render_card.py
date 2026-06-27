@@ -721,6 +721,7 @@ def _match_row(img, d, y, row_h, m, center):
 
 
 def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_label=""):
+    matches = [m for m in (matches or []) if m.get("home") and m.get("away")]   # bo'sh jamoa -> chizmaymiz
     W, pad, row_h = 900, 40, 70
     H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
     img, d = _new(W, H)
@@ -740,6 +741,7 @@ def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_l
 
 
 def render_results_card(date_label, matches, out_path="results.png", channel_label=""):
+    matches = [m for m in (matches or []) if m.get("home") and m.get("away")]   # bo'sh jamoa -> chizmaymiz
     W, pad, row_h = 900, 40, 70
     H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
     img, d = _new(W, H)
