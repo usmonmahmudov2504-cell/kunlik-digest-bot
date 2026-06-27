@@ -497,31 +497,64 @@ def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
     return None
 
 
-def blogify(title: str, desc: str = "") -> str | None:
-    """Yangilikni bir kishi yuritayotgan shaxsiy blog ovozida, tabiiy O'zbekchaga aylantiradi.
+def blogify(title: str, desc: str = "", body: str = "") -> str | None:
+    """Yangilikni shaxsiy, BATAFSIL blog ovozida tabiiy O'zbekchaga aylantiradi.
 
+    body (maqolaning to'liq matni) berilsa -> post uzunroq va mazmunliroq bo'ladi.
     voice="blog" kanallari uchun. LLM yo'q/xato -> None (chaqiruvchi standart formatga qaytadi).
     """
-    src = title.strip() + (("\n" + desc.strip()) if desc else "")
+    src = title.strip()
+    if body and body.strip():
+        src += "\n\n" + body.strip()
+    elif desc:
+        src += "\n" + desc.strip()
     prompt = (
         "Sen O'zbek tilida (lotin alifbosida) yozadigan zamonaviy startap, AI va "
-        "texnologiya blogerisan. Quyidagi xorijiy yangilik asosida o'z shaxsiy kanalingga "
-        "qisqa post yoz. Talablar:\n"
+        "texnologiya blogerisan. Quyidagi xorijiy yangilik asosida o'z kanalingga "
+        "BATAFSIL, mazmunli post yoz. Talablar:\n"
         "- Tabiiy, jonli, suhbatdek ohang; xuddi bir odam o'z bloggini yuritayotgandek.\n"
-        "- Ozgina shaxsiy fikr yoki qiziqish qo'sh (nega bu qiziq yoki muhim).\n"
-        "- 3-5 jumla, 1-2 abzas. Quruq xabarchilik, rasmiy uslub yoki reklama emas.\n"
-        "- Ko'pi bilan 1-2 mos emoji ishlat, ortiqcha emas.\n"
+        "- Nima bo'lganini tushuntir; muhim tafsilotlarni (raqam, nom, summa) saqla; "
+        "nega bu qiziq yoki muhimligini izohla; ozgina shaxsiy fikr qo'sh.\n"
+        "- 2-4 abzas, 6-10 jumla. To'liq va ma'lumotli, lekin suvsiz.\n"
+        "- Ko'pi bilan 2-3 mos emoji ishlat, ortiqcha emas.\n"
         "- HTML, markdown, yulduzcha (*) yoki sarlavha ishlatma. Faqat oddiy matn.\n"
-        "- Manba nomi, havola yoki sayt nomini (techcrunch, gazeta va h.k.) yozma.\n"
+        "- Manba nomi, havola yoki sayt nomini (techcrunch, venturebeat va h.k.) yozma.\n"
         "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
         f"Yangilik:\n{src}\n\nPost:"
     )
-    out = llm_text(prompt, max_tokens=400)
+    out = llm_text(prompt, max_tokens=900)
     if not out:
         return None
     out = out.strip().strip('"').strip()
     out = out.replace("**", "").replace("__", "").replace("*", "")
-    return out or None
+    return out[:950] or None       # Telegram rasm-caption limiti (1024) ichida qolsin
+
+
+def _article_text(link: str, max_paras: int = 12, max_chars: int = 3500) -> str:
+    """Maqolaning asosiy matnini (paragraflar) manbadan oladi -> blog uchun kontekst."""
+    if not link:
+        return ""
+    try:
+        html_ = requests.get(link, headers=UA_WEB, timeout=15).text
+    except Exception as e:
+        print("Maqola matni xato:", e)
+        return ""
+    soup = BeautifulSoup(html_, "html.parser")
+    for bad in soup(["script", "style", "noscript", "figure", "iframe"]):
+        bad.decompose()
+    container = (soup.find("article")
+                 or soup.find(attrs={"itemprop": "articleBody"})
+                 or soup.find(class_=re.compile(r"article|content|news|post|body", re.I))
+                 or soup)
+    paras, seen = [], set()
+    for p in container.find_all("p"):
+        t = p.get_text(" ", strip=True)
+        if len(t) >= 40 and t not in seen:
+            seen.add(t)
+            paras.append(t)
+        if len(paras) >= max_paras:
+            break
+    return "\n".join(paras)[:max_chars]
 
 
 def translate_to_uz(text: str) -> str:
@@ -1424,7 +1457,14 @@ def post_breaking(item, translate=None, voice=None) -> bool:
             title = translate_to_uz(title)
             if desc:
                 desc = translate_to_uz(desc[:300])
-        blog = blogify(title, desc) if voice == "blog" else None
+        # Tavsif sarlavha bilan bir xil (yoki uning ichida) bo'lsa -> takrorni olib tashlaymiz
+        if desc:
+            _norm = lambda s: re.sub(r"\W+", "", s).lower()
+            dn, tn = _norm(desc), _norm(title)
+            if dn and tn and (dn == tn or dn in tn or tn in dn):
+                desc = ""
+        body = _article_text(link) if voice == "blog" else ""   # to'liq matn -> batafsilroq
+        blog = blogify(title, desc, body) if voice == "blog" else None
         if blog:
             # Shaxsiy blog ovozi: AI yozgan tabiiy matn (HTML teglarsiz, xavfsiz)
             cap = html.escape(blog, quote=False)
