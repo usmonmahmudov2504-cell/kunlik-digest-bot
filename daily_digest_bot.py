@@ -472,8 +472,11 @@ def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
     if not GEMINI_API_KEY:
         print("Gemini: kalit yo'q (GEMINI_API_KEY o'rnatilmagan).")
         return None
+    # thinkingBudget=0 -> Gemini 2.5 "o'ylash" tokenlarini o'chiramiz, aks holda ular
+    # maxOutputTokens'ni yeb qo'yadi va javob yarim uzilib qoladi (matn kesik chiqadi).
     body = {"contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
+            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7,
+                                 "thinkingConfig": {"thinkingBudget": 0}}}
     for model in GEMINI_MODELS:
         try:
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -481,9 +484,7 @@ def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
             r = requests.post(url, json=body, timeout=25)
             if r.status_code != 200:
                 print(f"Gemini [{model}] {r.status_code}: {r.text[:160]}")
-                if r.status_code in (400, 403):     # kalit/ruxsat muammosi -> boshqa model befoyda
-                    break
-                continue                            # 404/429/5xx -> keyingi modelni sinab ko'ramiz
+                continue                            # har qanday xato -> keyingi modelni sinab ko'ramiz
             cands = (r.json().get("candidates") or [])
             if not cands:
                 print(f"Gemini [{model}]: nomzod yo'q (ehtimol xavfsizlik bloki).")
@@ -1598,7 +1599,7 @@ def post_startup_stats(date_label, focus=None) -> bool:
                 "Quyidagi bugungi raqamlar asosida startap tadbirkorlari uchun 1-2 jumlalik "
                 "qisqa, jonli amaliy izoh yoz (xarajat, investitsiya yoki bozor kayfiyati "
                 "nuqtai nazaridan). Oddiy matn, HTML yo'q, ko'pi bilan 1 emoji. Faqat izohni "
-                "qaytar:\n" + "\n".join(lines), max_tokens=180)
+                "qaytar:\n" + "\n".join(lines), max_tokens=300)
             if note:
                 clean = html.escape(note.strip().replace("*", ""), quote=False)
                 body += "\n\n" + clean
