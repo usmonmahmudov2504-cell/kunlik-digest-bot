@@ -1132,7 +1132,9 @@ def _channel_footer() -> str:
     if not ch.startswith("@"):
         return ""
     uname = ch[1:]
-    link = f'<a href="https://t.me/{uname}">{ch}</a>'
+    # Ko'rinadigan matn = chiroyli kanal nomi; havola esa o'sha kanalga (o'zgarmaydi).
+    label = html.escape(CHANNEL_NAME or ch, quote=False)
+    link = f'<a href="https://t.me/{uname}">{label}</a>'
     return ("\n\n━━━━━━━━━━━━━━"
             f"\n{FOOTER_SERVICES}"
             f"\n👉 {link} — obuna bo'ling 🔔 · ulashing 📢")
@@ -1380,7 +1382,8 @@ def goal_caption(m, scorer="", scored="") -> str:
     text = "\n".join(p for p in parts if p is not None)
     ch = str(TELEGRAM_CHANNEL).strip()
     if ch.startswith("@"):
-        text += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+        label = html.escape(CHANNEL_NAME or ch, quote=False)
+        text += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
                  " · obuna bo'ling \U0001F514")
     return text
 
@@ -1480,10 +1483,12 @@ def post_breaking(item, translate=None, voice=None, focus=None) -> bool:
             if desc:
                 cap += f"\n\n{html.escape(desc[:400], quote=False)}"
         ch = str(TELEGRAM_CHANNEL).strip()
+        # Ko'rinadigan matn = chiroyli kanal nomi; havola o'sha kanalga (o'zgarmaydi).
+        label = html.escape(CHANNEL_NAME or ch, quote=False)
         if ch.startswith("@") and voice == "blog":
-            cap += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+            cap += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
         elif ch.startswith("@"):
-            cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+            cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
                     " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
         # Instant View sahifasi + pastdagi tugma (translate -> ichi ham o'zbekcha)
         iv_url = make_instant_view(item, translate=translate) or link
