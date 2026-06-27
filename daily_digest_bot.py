@@ -514,11 +514,12 @@ def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
     return None
 
 
-def blogify(title: str, desc: str = "", body: str = "", focus: str = "") -> str | None:
-    """Yangilikni shaxsiy, BATAFSIL blog ovozida tabiiy O'zbekchaga aylantiradi.
+def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
+            persona: str = "") -> str | None:
+    """Yangilikni BATAFSIL, MA'LUMOTLI post sifatida tabiiy O'zbekchaga aylantiradi.
 
     body (maqolaning to'liq matni) berilsa -> post uzunroq va mazmunliroq bo'ladi.
-    focus (kanal config'idagi voice_focus) -> yozuvga qo'shimcha yo'nalish/urg'u beradi.
+    focus (voice_focus) -> qo'shimcha yo'nalish/urg'u. persona (voice_persona) -> kim yozayotgani.
     voice="blog" kanallari uchun. LLM yo'q/xato -> None (chaqiruvchi standart formatga qaytadi).
     """
     src = title.strip()
@@ -526,18 +527,19 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "") -> str 
         src += "\n\n" + body.strip()
     elif desc:
         src += "\n" + desc.strip()
+    persona = (persona or "").strip() or "zamonaviy startap, AI va texnologiya blogeri"
     focus_line = (f"- YO'NALISH (eng muhim): {focus.strip()}\n") if focus and focus.strip() else ""
     prompt = (
-        "Sen O'zbek tilida (lotin alifbosida) yozadigan zamonaviy startap, AI va "
-        "texnologiya blogerisan. Quyidagi xorijiy yangilik asosida o'z kanalingga "
-        "BATAFSIL, mazmunli post yoz. Talablar:\n"
-        "- Tabiiy, jonli, suhbatdek ohang; xuddi bir odam o'z bloggini yuritayotgandek.\n"
-        "- Nima bo'lganini tushuntir; muhim tafsilotlarni (raqam, nom, summa) saqla; "
-        "nega bu qiziq yoki muhimligini izohla; ozgina shaxsiy fikr qo'sh.\n"
+        f"Sen O'zbek tilida (lotin alifbosida) yozadigan {persona}san. "
+        "Quyidagi xorijiy yangilik asosida o'z kanalingga BATAFSIL, MA'LUMOTLI post yoz. Talablar:\n"
+        "- AVVAL ASOSIY MA'LUMOTNI ber: nima/kim/qachon/qayerda, hisob, raqamlar, "
+        "kontekst. Manba sarlavhasi savol shaklida bo'lsa ham, sen JAVOBNI va FAKTLARNI yoz "
+        "— faqat savol berib qo'yma, o'quvchi postning o'zidan to'liq tushunsin.\n"
+        "- Tabiiy, jonli ohang; nega bu qiziq yoki muhimligini ham qisqa izohla.\n"
         "- 2-4 abzas, 6-10 jumla. To'liq va ma'lumotli, lekin suvsiz.\n"
         "- Ko'pi bilan 2-3 mos emoji ishlat, ortiqcha emas.\n"
         "- HTML, markdown, yulduzcha (*) yoki sarlavha ishlatma. Faqat oddiy matn.\n"
-        "- Manba nomi, havola yoki sayt nomini (techcrunch, venturebeat va h.k.) yozma.\n"
+        "- Manba nomi, havola yoki sayt nomini (techcrunch, championat va h.k.) yozma.\n"
         + focus_line +
         "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
         f"Yangilik:\n{src}\n\nPost:"
@@ -1479,7 +1481,7 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
             resp2.raise_for_status()
 
 
-def post_breaking(item, translate=None, voice=None, focus=None) -> bool:
+def post_breaking(item, translate=None, voice=None, focus=None, persona=None) -> bool:
     """Tezkor xabar (toza): rasm tepada + qisqa matn + pastda "Instant View" tugma.
 
     voice="blog" -> matn bir kishi yuritayotgan shaxsiy blog ovozida qayta yoziladi.
@@ -1501,7 +1503,7 @@ def post_breaking(item, translate=None, voice=None, focus=None) -> bool:
             if td and tt and len(td & tt) / min(len(td), len(tt)) >= 0.6:
                 desc = ""
         body = _article_text(link) if voice == "blog" else ""   # to'liq matn -> batafsilroq
-        blog = blogify(title, desc, body, focus or "") if voice == "blog" else None
+        blog = blogify(title, desc, body, focus or "", persona or "") if voice == "blog" else None
         if blog:
             # Shaxsiy blog ovozi: AI yozgan tabiiy matn (HTML teglarsiz, xavfsiz)
             cap = html.escape(blog, quote=False)
@@ -1731,8 +1733,10 @@ def run_channel(now, date_label, group, cfg) -> list:
         # heartbeat: tezkor (C) doim, kunlik (A/B/F/R/S) bir marta, ko'p slotlilar jadval bo'yicha
         d_slots = slots_cfg.get("D", list(D_SLOTS))   # standart: D kuniga 3 marta
         m_slots = slots_cfg.get("M")                  # bo'lsa M ko'p marta; bo'lmasa kuniga 1
+        o_slots = slots_cfg.get("O", list(O_SLOTS))   # original blog: standart kuniga 2 marta
         d_due = due_multi("D", now, daily_state, d_slots) if "D" in groups_on else []
         m_due = due_multi("M", now, daily_state, m_slots) if (m_slots and "M" in groups_on) else []
+        o_due = due_multi("O", now, daily_state, o_slots) if "O" in groups_on else []
         due = {g for g in ("A", "B", "F", "R", "S", "P")
                if g in groups_on and daily_due(g, now, daily_state)}
         # M: slotli kanal -> m_due; aks holda kuniga bir marta (daily_due)
@@ -1791,8 +1795,9 @@ def run_channel(now, date_label, group, cfg) -> list:
         feeds = cfg.get("news_feeds", preset["feeds"])
         kw = cfg.get("news_keywords", preset["keywords"])
         translate = cfg.get("translate")      # masalan "uz" -> ruscha sarlavhani tarjima
-        voice = cfg.get("voice")              # "blog" -> shaxsiy blog ovozida qayta yozish
+        voice = cfg.get("voice")              # "blog" -> ma'lumotli post ovozida qayta yozish
         focus = cfg.get("voice_focus")        # blog uchun qo'shimcha yo'nalish/urg'u (marketing, psixologiya...)
+        persona = cfg.get("voice_persona")    # kim yozayotgani (mas. "sport jurnalisti")
         news = get_news(feeds, kw, limit=10)
         block = [w.lower() for w in cfg.get("news_block", [])]   # reklama/begona sarlavhalarni kesish
         if block:
@@ -1805,7 +1810,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         if not fresh:
             print("Yangi xabar yo'q (takror oldini olindi).")
         for it in fresh:
-            ok = post_breaking(it, translate=translate, voice=voice, focus=focus)
+            ok = post_breaking(it, translate=translate, voice=voice, focus=focus, persona=persona)
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))

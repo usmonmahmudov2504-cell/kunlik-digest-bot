@@ -13,6 +13,9 @@
     "groups": ["G", "F", "R", "S", "C"],
     "news_preset": "football",
     "translate": "uz",
+    "voice": "blog",
+    "voice_persona": "tajribali sport va futbol jurnalisti",
+    "voice_focus": "Futbol o'yini yoki yangiligi haqida ANIQ FAKTLARNI ber: qaysi jamoalar, o'yin sanasi va Toshkent vaqti, qaysi turnir va bosqich, agar o'ynalgan bo'lsa hisob va gol mualliflari, jamoalar holati/formasi, qayerda jonli tomosha qilish mumkin. O'yin oldidan bo'lsa kutilayotgan kurash va o'yinning ahamiyatini izohla. Faqat sarlavhani takrorlama — postning o'zidan hammasi tushunarli bo'lsin.",
     "footer_services": "⚽ Jahon futboli · 🇺🇿 O'zbekiston · 📊 Natijalar"
   },
   {
