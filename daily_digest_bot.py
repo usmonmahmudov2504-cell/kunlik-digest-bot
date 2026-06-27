@@ -545,12 +545,12 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
         "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
         f"Yangilik:\n{src}\n\nPost:"
     )
-    out = llm_text(prompt, max_tokens=900)
+    out = llm_text(prompt, max_tokens=700)
     if not out:
         return None
     out = out.strip().strip('"').strip()
     out = out.replace("**", "").replace("__", "").replace("*", "")
-    return out[:950] or None       # Telegram rasm-caption limiti (1024) ichida qolsin
+    return out[:850] or None       # to'liqroq, lekin Telegram rasm-caption limiti (1024) ichida xavfsiz
 
 
 def _article_text(link: str, max_paras: int = 12, max_chars: int = 3500) -> str:
