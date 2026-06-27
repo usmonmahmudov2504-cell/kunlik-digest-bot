@@ -22,5 +22,19 @@
     "groups": ["D", "M", "B"],
     "slots": {"D": [9.0, 12.0, 15.0, 18.0], "M": [11.0, 17.0]},
     "footer_services": "💵 Valyuta · 🏦 Banklar kurslari"
+  },
+  {
+    "name": "StartupNews | Amiriddinova",
+    "channel": "@Startupnews_Amiriddinova",
+    "token_env": "TELEGRAM_BOT_TOKEN",
+    "groups": ["C"],
+    "news_keywords": ["startup", "стартап", "startap", "venchur", "venture",
+                      "akselerator", "акселератор", "it park", "it-park", "innovatsiya",
+                      "инновац", "investitsiya", "инвестиц", "grant", "грант", "fintech",
+                      "финтех", "texnologiya", "технолог", "raqamli", "цифров",
+                      "sun'iy intellekt", "искусственный интеллект", "ai ", " ai",
+                      "ilova", "приложение", "tadbirkor", "предприним", "biznes g'oya",
+                      "venchur kapital", "ipo", "unicorn", "единорог"],
+    "footer_services": "🚀 Startup · 🤖 AI · 📈 Investitsiyalar"
   }
 ]
