@@ -424,49 +424,42 @@ def render_currency_overview_card(date_label, rows, out_path="rates.png", channe
     prev: {code: oldingi_qiymat} -> kunlik o'zgarish (▲ yashil / ▼ qizil) ko'rsatiladi.
     """
     prev = prev or {}
-    W, pad, row_h = 900, 40, 66
+    W, pad, row_h = 900, 40, 74
     H = pad + 96 + 40 + 44 + len(rows) * row_h + 60
     img, d = _new(W, H)
-    _header(img, W, pad, "Kurslar", date_label, GREEN, "rates")
+    _header(img, W, pad, "Valyuta kurslari", date_label, GREEN, "rates")
     y = pad + 96 + 40
-    d.text((pad + 4, y), "Markaziy bank rasmiy kursi (1 birlik uchun)", font=R(22), fill=MUTED)
+    d.text((pad + 4, y), "Markaziy bank rasmiy kursi · so'mda", font=R(22), fill=MUTED)
     y += 44
-    f_code, f_name, f_rate, f_chg = B(30), R(23), B(29), B(21)
-    chg_right = W - pad - 22
-    rate_right = chg_right - 150
+    f_code, f_val, f_chg = B(34), B(32), B(23)
+    chg_right = W - pad - 24
     for r in rows:
-        _panel(img, (pad, y, W - pad, y + row_h - 8), 12, CARD, blur=10, dy=4, alpha=80)
+        _panel(img, (pad, y, W - pad, y + row_h - 8), 14, CARD, blur=10, dy=4, alpha=85)
         cy = y + (row_h - 8) // 2
-        # bayroq
-        fl = _flag(r["code"], 28)
+        x = pad + 26
+        fl = _flag(r["code"], 32)               # bayroq
         if fl:
-            img.paste(fl, (pad + 20, cy - fl.height // 2), fl)
-        d.text((pad + 80, cy - 18), r["code"], font=f_code, fill=ACCENT)
-        # kurs (avval o'lchaymiz -> nomni qolgan joyga moslaymiz)
-        rate_s = f"{r['rate']} so'm"
-        rw = d.textlength(rate_s, font=f_rate)
-        name = _ellipsize(d, f"{r['name']}  ({r['unit']})", f_name, rate_right - rw - (pad + 160) - 20)
-        d.text((pad + 160, cy - 13), name, font=f_name, fill=MUTED)
-        d.text((rate_right - rw, cy - 17), rate_s, font=f_rate, fill=TEXT)
-        # kunlik o'zgarish: vektor uchburchak + farq (tofu xavfi yo'q)
+            img.paste(fl, (x, cy - fl.height // 2), fl)
+            x += fl.width + 20
+        d.text((x, cy - 21), r["code"], font=f_code, fill=ACCENT)   # KOD (ko'k)
+        x += d.textlength(r["code"], font=f_code) + 14
+        d.text((x, cy - 20), f"= {r['rate']}", font=f_val, fill=TEXT)  # = qiymat
+        # kunlik o'zgarish: rangli farq + yo'nalish uchburchagi (o'ng tomonda)
         val = r.get("value")
         delta = (val - prev[r["code"]]) if (val is not None and r["code"] in prev) else None
-        if delta is None or abs(delta) < 0.005:
-            d.text((chg_right - d.textlength("—", font=f_chg), cy - 13), "—",
-                   font=f_chg, fill=MUTED)
-        else:
+        if delta is not None and abs(delta) >= 0.005:
             up = delta > 0
             col = GREEN if up else RED
             txt = _fmt_delta(delta)
             tw = d.textlength(txt, font=f_chg)
             tri = 14
-            xs = chg_right - tw - tri - 8
+            xs = chg_right - tw - tri - 10
             t = cy - 2
             if up:
                 d.polygon([(xs, t + 6), (xs + tri, t + 6), (xs + tri / 2, t - 7)], fill=col)
             else:
                 d.polygon([(xs, t - 6), (xs + tri, t - 6), (xs + tri / 2, t + 7)], fill=col)
-            d.text((chg_right - tw, cy - 13), txt, font=f_chg, fill=col)
+            d.text((chg_right - tw, cy - 14), txt, font=f_chg, fill=col)
         y += row_h
     _footer(d, W, H, pad, channel_label, "Manba: cbu.uz")
     img.save(out_path)
