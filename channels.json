@@ -29,12 +29,24 @@
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["C"],
     "news_feeds": [
+      ["https://www.spot.uz/uz/rss/", false],
+      ["https://kun.uz/uz/rss", false],
+      ["https://www.gazeta.uz/uz/rss/", false],
       ["https://techcrunch.com/category/startups/feed/", true],
       ["https://techcrunch.com/category/artificial-intelligence/feed/", true],
       ["https://venturebeat.com/feed/", true]
     ],
+    "news_keywords": ["startup", "startap", "стартап", "venchur", "venture", "венчур",
+                      "akselerator", "акселератор", "it park", "it-park", "inkubator",
+                      "innovatsiya", "инновац", "investitsiya", "инвестиц", "grant", "грант",
+                      "tanlov", "ko'rik-tanlov", "hakaton", "xakaton", "hackathon", "fintech",
+                      "финтех", "sun'iy intellekt", "tadbirkor", "biznes g'oya", "unicorn", "ipo"],
+    "news_block": ["founder summit", "early bird", "pricing ends", "save up to",
+                   "disrupt 20", "buy tickets", "register now", "join 1,000", "last chance",
+                   "techcrunch all stage", "techcrunch disrupt", "sessions:", "ticket"],
     "translate": "uz",
     "voice": "blog",
+    "voice_focus": "Marketing va psixologiyaga alohida urg'u ber: g'oya yoki mahsulot odamlarni nega qiziqtiradi, qaysi ehtiyoj va his-tuyg'uni qondiradi, qanday marketing/o'sish saboqlari bor. Iloji bo'lsa muvaffaqiyatli startaplar hikoyasidek ilhomlantiruvchi, o'rgatuvchi ohangda yoz va O'zbekistonlik tadbirkor uchun amaliy xulosa qo'sh.",
     "footer_services": "🚀 Startup · 🤖 AI · 📈 Investitsiyalar"
   }
 ]

@@ -497,10 +497,11 @@ def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
     return None
 
 
-def blogify(title: str, desc: str = "", body: str = "") -> str | None:
+def blogify(title: str, desc: str = "", body: str = "", focus: str = "") -> str | None:
     """Yangilikni shaxsiy, BATAFSIL blog ovozida tabiiy O'zbekchaga aylantiradi.
 
     body (maqolaning to'liq matni) berilsa -> post uzunroq va mazmunliroq bo'ladi.
+    focus (kanal config'idagi voice_focus) -> yozuvga qo'shimcha yo'nalish/urg'u beradi.
     voice="blog" kanallari uchun. LLM yo'q/xato -> None (chaqiruvchi standart formatga qaytadi).
     """
     src = title.strip()
@@ -508,6 +509,7 @@ def blogify(title: str, desc: str = "", body: str = "") -> str | None:
         src += "\n\n" + body.strip()
     elif desc:
         src += "\n" + desc.strip()
+    focus_line = (f"- YO'NALISH (eng muhim): {focus.strip()}\n") if focus and focus.strip() else ""
     prompt = (
         "Sen O'zbek tilida (lotin alifbosida) yozadigan zamonaviy startap, AI va "
         "texnologiya blogerisan. Quyidagi xorijiy yangilik asosida o'z kanalingga "
@@ -519,6 +521,7 @@ def blogify(title: str, desc: str = "", body: str = "") -> str | None:
         "- Ko'pi bilan 2-3 mos emoji ishlat, ortiqcha emas.\n"
         "- HTML, markdown, yulduzcha (*) yoki sarlavha ishlatma. Faqat oddiy matn.\n"
         "- Manba nomi, havola yoki sayt nomini (techcrunch, venturebeat va h.k.) yozma.\n"
+        + focus_line +
         "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
         f"Yangilik:\n{src}\n\nPost:"
     )
@@ -1443,7 +1446,7 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
             resp2.raise_for_status()
 
 
-def post_breaking(item, translate=None, voice=None) -> bool:
+def post_breaking(item, translate=None, voice=None, focus=None) -> bool:
     """Tezkor xabar (toza): rasm tepada + qisqa matn + pastda "Instant View" tugma.
 
     voice="blog" -> matn bir kishi yuritayotgan shaxsiy blog ovozida qayta yoziladi.
@@ -1464,7 +1467,7 @@ def post_breaking(item, translate=None, voice=None) -> bool:
             if dn and tn and (dn == tn or dn in tn or tn in dn):
                 desc = ""
         body = _article_text(link) if voice == "blog" else ""   # to'liq matn -> batafsilroq
-        blog = blogify(title, desc, body) if voice == "blog" else None
+        blog = blogify(title, desc, body, focus or "") if voice == "blog" else None
         if blog:
             # Shaxsiy blog ovozi: AI yozgan tabiiy matn (HTML teglarsiz, xavfsiz)
             cap = html.escape(blog, quote=False)
@@ -1662,7 +1665,12 @@ def run_channel(now, date_label, group, cfg) -> list:
         kw = cfg.get("news_keywords", preset["keywords"])
         translate = cfg.get("translate")      # masalan "uz" -> ruscha sarlavhani tarjima
         voice = cfg.get("voice")              # "blog" -> shaxsiy blog ovozida qayta yozish
+        focus = cfg.get("voice_focus")        # blog uchun qo'shimcha yo'nalish/urg'u (marketing, psixologiya...)
         news = get_news(feeds, kw, limit=10)
+        block = [w.lower() for w in cfg.get("news_block", [])]   # reklama/begona sarlavhalarni kesish
+        if block:
+            news = [it for it in news
+                    if not any(w in (it.get("title") or "").lower() for w in block)]
         posted = load_posted()
         seen = set(posted)
         fresh = [it for it in news if _news_key(it) and _news_key(it) not in seen]
@@ -1670,7 +1678,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         if not fresh:
             print("Yangi xabar yo'q (takror oldini olindi).")
         for it in fresh:
-            ok = post_breaking(it, translate=translate, voice=voice)
+            ok = post_breaking(it, translate=translate, voice=voice, focus=focus)
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
