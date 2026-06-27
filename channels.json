@@ -28,13 +28,13 @@
     "channel": "@Startupnews_Amiriddinova",
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["C"],
-    "news_keywords": ["startup", "стартап", "startap", "venchur", "venture",
-                      "akselerator", "акселератор", "it park", "it-park", "innovatsiya",
-                      "инновац", "investitsiya", "инвестиц", "grant", "грант", "fintech",
-                      "финтех", "texnologiya", "технолог", "raqamli", "цифров",
-                      "sun'iy intellekt", "искусственный интеллект", "ai ", " ai",
-                      "ilova", "приложение", "tadbirkor", "предприним", "biznes g'oya",
-                      "venchur kapital", "ipo", "unicorn", "единорог"],
+    "news_feeds": [
+      ["https://techcrunch.com/category/startups/feed/", true],
+      ["https://techcrunch.com/category/artificial-intelligence/feed/", true],
+      ["https://venturebeat.com/feed/", true]
+    ],
+    "translate": "uz",
+    "voice": "blog",
     "footer_services": "🚀 Startup · 🤖 AI · 📈 Investitsiyalar"
   }
 ]
