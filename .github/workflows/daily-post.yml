@@ -10,6 +10,9 @@ on:
       group:
         description: "Guruh: all, AUTO, A-D, M, F(o'yinlar), R(natijalar), S(jadval), G(gollar)"
         default: "all"
+      channel:
+        description: "Faqat shu kanal (masalan: Startupnews). Bo'sh = barcha kanallar"
+        default: ""
 
 jobs:
   post:
@@ -42,6 +45,7 @@ jobs:
       - run: python daily_digest_bot.py
         env:
           POST_GROUP: ${{ steps.grp.outputs.group }}
+          ONLY_CHANNEL: ${{ github.event.inputs.channel }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

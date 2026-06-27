@@ -1953,6 +1953,11 @@ def main() -> None:
         return
 
     channels = load_channels()
+    # ONLY_CHANNEL berilsa -> faqat shu kanal(lar)da post (qo'lda test uchun, masalan @Startupnews...).
+    only = os.environ.get("ONLY_CHANNEL", "").strip().lstrip("@").lower()
+    if only:
+        channels = [c for c in channels if only in str(c.get("channel", "")).lstrip("@").lower()]
+        print(f"Filtr ONLY_CHANNEL='{only}' -> {len(channels)} kanal")
     print(f"Guruh {group} | Kanallar soni: {len(channels)}")
     results = []
     for cfg in channels:
