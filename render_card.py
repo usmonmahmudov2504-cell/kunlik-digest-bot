@@ -601,7 +601,7 @@ def render_market_card(date_label, rows, out_path="market.png", channel_label=""
         col = _MK_COLOR.get(r.get("kind"), ACCENT)
         cyc = y + row_h // 2
         d.ellipse((pad + 24, cyc - 9, pad + 42, cyc + 9), fill=col)
-        d.text((pad + 64, y + 18), r["name"], font=B(34), fill=TEXT)
+        d.text((pad + 64, y + 18), r["name"], font=B(34), fill=ACCENT)
         d.text((pad + 64, y + 60), r.get("sub", ""), font=R(22), fill=MUTED)
         pf = B(40)
         pw = d.textlength(r["value"], font=pf)
