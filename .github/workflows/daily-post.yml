@@ -51,16 +51,27 @@ jobs:
           # (test qulay bo'lsin). Jadval (schedule/AUTO) -> bo'sh, darvoza ishlaydi.
           FORCE_POST: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
 
-      # Holatni (tezkor dedup + kunlik belgilar) repoga saqlash (faqat o'zgargan bo'lsa)
+      # Holatni (tezkor dedup + kunlik belgilar) repoga saqlash (faqat o'zgargan bo'lsa).
+      # MUHIM: main oldinga ketgan bo'lsa (boshqa commit) oddiy push RAD etiladi va holat
+      # yo'qoladi -> keyingi run TAKROR postlaydi. Shuning uchun rebase + qayta urinish.
       - name: Holatni saqlash
         if: always()
         run: |
-          if [ -n "$(git status --porcelain state/)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add state/
-            git commit -m "chore: post holati [skip ci]"
-            git push
-          else
+          if [ -z "$(git status --porcelain state/)" ]; then
             echo "Holatda o'zgarish yo'q."
+            exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/
+          git commit -m "chore: post holati [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "Holat saqlandi (urinish $i)."
+              exit 0
+            fi
+            echo "Push rad etildi -> rebase qilib qayta urinaman ($i)..."
+            git pull --rebase --autostash origin main || true
+          done
+          echo "XATO: holatni 5 urinishda ham saqlab bo'lmadi."
+          exit 1
