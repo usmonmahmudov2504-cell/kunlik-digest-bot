@@ -23,7 +23,7 @@
     "name": "Dollar Kursi | Bugun",
     "channel": "@DollarKursis",
     "token_env": "TELEGRAM_BOT_TOKEN",
-    "groups": ["D", "M", "B"],
+    "groups": ["D", "M", "B", "V"],
     "slots": {"D": [9.0, 12.0, 15.0, 18.0], "M": [11.0, 17.0]},
     "footer_services": "💵 Valyuta · 🏦 Banklar kurslari"
   },

@@ -536,7 +536,8 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
         "kontekst. Manba sarlavhasi savol shaklida bo'lsa ham, sen JAVOBNI va FAKTLARNI yoz "
         "— faqat savol berib qo'yma, o'quvchi postning o'zidan to'liq tushunsin.\n"
         "- Tabiiy, jonli ohang; nega bu qiziq yoki muhimligini ham qisqa izohla.\n"
-        "- 2-4 abzas, 6-10 jumla. To'liq va ma'lumotli, lekin suvsiz.\n"
+        "- 1-2 abzas, 3-5 jumla (taxminan 60-110 so'z). Asosiy faktni ber, "
+        "lekin cho'zma — qisqa va lo'nda. Juda qisqa ham, juda uzun ham emas.\n"
         "- Ko'pi bilan 2-3 mos emoji ishlat, ortiqcha emas.\n"
         "- HTML, markdown, yulduzcha (*) yoki sarlavha ishlatma. Faqat oddiy matn.\n"
         "- Manba nomi, havola yoki sayt nomini (techcrunch, championat va h.k.) yozma.\n"
@@ -2122,6 +2123,22 @@ def run_channel(now, date_label, group, cfg) -> list:
                 lambda st=st, cn=cn: render_standings_card(date_label, st, "p10.png", ch, comp=cn),
                 standings_caption(date_label, st, comp), f"Jadval ({cn})"))
         done_today.append("S")
+
+    # --- V guruh: viloyatlar bo'yicha dollar kursi (chiroyli tree-matn) ---
+    if want("V"):
+        banks = get_bank_rates()
+        cap = regional_dollar_caption(date_label, banks)
+        if cap:
+            try:
+                post_message(cap, link_preview={"is_disabled": True})
+                print("Viloyatlar dollar ✓")
+                results.append(True)
+            except Exception as e:
+                print("Viloyatlar dollar XATO:", e)
+                results.append(False)
+        else:
+            print("Viloyatlar dollar: bank kursi topilmadi.")
+        done_today.append("V")
 
     # AUTO rejimida: bugun chiqarilganlarni belgilab qo'yamiz (qayta chiqmasin)
     if group == "AUTO" and (done_today or state_changed):
