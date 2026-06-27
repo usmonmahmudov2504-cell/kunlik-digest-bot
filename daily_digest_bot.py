@@ -1319,6 +1319,7 @@ def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
         parts.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy): " + "   ".join(pairs[:3]))
         parts.append("")
     parts.append("\U0001F4CA To'liq banklar jadvali \u2014 rasmda \u2b06\ufe0f")
+    parts.append("\U0001F7E2 yashil \u2014 eng qimmat oladi \u00b7 \U0001F535 ko'k \u2014 eng arzon sotadi")
     parts.append("")
     parts.append(_tags("dollar"))
     return _finish(parts)
