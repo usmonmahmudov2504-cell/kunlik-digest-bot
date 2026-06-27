@@ -1500,6 +1500,93 @@ def post_breaking(item, translate=None, voice=None, focus=None) -> bool:
         return False
 
 
+def post_startup_stats(date_label, focus=None) -> bool:
+    """Startupga moslangan kunlik raqamlar: USD/UZS, Bitcoin, Yevro + yengil prognoz.
+
+    Prognoz oxirgi kunlardagi USD tarixidan (prev_stats.json) hisoblanadi -> sof
+    taxmin, moliyaviy maslahat emas. Gemini bo'lsa qisqa blog-izoh ham qo'shiladi.
+    """
+    try:
+        _, overview, _ = get_cbu_rates()
+        usd = next((r["value"] for r in overview if r["code"] == "USD"), None)
+        eur = next((r["value"] for r in overview if r["code"] == "EUR"), None)
+        market = get_market_data()
+        btc = market.get("btc")
+        if not usd and not btc:
+            print("Statistika: ma'lumot topilmadi.")
+            return False
+
+        st = _load_json("prev_stats.json", {})
+        hist = st.get("usd_hist", [])        # [{"d": "YYYY-MM-DD", "v": float}, ...]
+        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
+        today = now.strftime("%Y-%m-%d")
+        # kechagi qiymat (bugun yozilgan bo'lsa, undan oldingisini olamiz)
+        prev_vals = [h["v"] for h in hist if h.get("d") != today]
+        yest_v = prev_vals[-1] if prev_vals else None
+
+        lines = [f"\U0001F4CA <b>Startup uchun raqamlar \u2014 {date_label}</b>", ""]
+        if usd:
+            chg = ""
+            if yest_v:
+                d = usd - yest_v
+                if abs(d) >= 0.01:
+                    chg = f"  {'\u25b2' if d > 0 else '\u25bc'} {abs(d):,.0f}".replace(",", " ") + " so'm (kecha)"
+            lines.append(f"\U0001F4B5 Dollar (CBU): <b>{_fmt_sum(usd)}</b> so'm{chg}")
+        if eur:
+            lines.append(f"\U0001F4B6 Yevro: {_fmt_sum(eur)} so'm")
+        if btc:
+            bchg = btc.get("chg")
+            bc = (f"  {'\u25b2' if (bchg or 0) >= 0 else '\u25bc'} {abs(bchg):.1f}% (24s)"
+                  if bchg is not None else "")
+            lines.append(f"\U0001FA99 Bitcoin: <b>${_fmt_usd(btc['usd'])}</b>{bc}")
+
+        # --- yengil prognoz (deterministik, USD tarixidan) ---
+        forecast = ""
+        series = [v for v in ([h["v"] for h in hist[-6:]] + ([usd] if usd else [])) if v]
+        if usd and len(series) >= 3:
+            deltas = [b - a for a, b in zip(series, series[1:])]
+            avg = sum(deltas) / len(deltas)
+            nxt = usd + avg
+            dirw = ("ko'tarilishi" if avg > 0.5 else
+                    "pasayishi" if avg < -0.5 else "barqaror qolishi")
+            forecast = (f"\n\n\U0001F4C8 <i>Taxminiy yo'nalish:</i> dollar yaqin kunlarda "
+                        f"{dirw} mumkin (\u2248 {_fmt_sum(nxt)} so'm). "
+                        f"Bu prognoz \u2014 moliyaviy maslahat emas.")
+
+        body = "\n".join(lines) + forecast
+
+        # --- ixtiyoriy: startup nuqtai nazaridan qisqa blog-izoh (Gemini bo'lsa) ---
+        if focus:
+            note = llm_text(
+                "Quyidagi bugungi raqamlar asosida startap tadbirkorlari uchun 1-2 jumlalik "
+                "qisqa, jonli amaliy izoh yoz (xarajat, investitsiya yoki bozor kayfiyati "
+                "nuqtai nazaridan). Oddiy matn, HTML yo'q, ko'pi bilan 1 emoji. Faqat izohni "
+                "qaytar:\n" + "\n".join(lines), max_tokens=180)
+            if note:
+                clean = html.escape(note.strip().replace("*", ""), quote=False)
+                body += "\n\n" + clean
+
+        ch = str(TELEGRAM_CHANNEL).strip()
+        if ch.startswith("@"):
+            body += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+
+        post_message(body, link_preview={"is_disabled": True})
+
+        # tarix\u043d\u0438 yangilaymiz (kuniga bitta yozuv)
+        if usd:
+            if hist and hist[-1].get("d") == today:
+                hist[-1]["v"] = usd
+            else:
+                hist.append({"d": today, "v": usd})
+            st["usd_hist"] = hist[-14:]
+            _save_json("prev_stats.json", st)
+        print("Statistika \u2713")
+        return True
+    except Exception as e:
+        print(f"Statistika XATO: {e}")
+        return False
+
+
 def safe_post(render_fn, caption, label):
     """Bitta post xato bersa, butun ishni to'xtatmaydi."""
     try:
@@ -1521,7 +1608,7 @@ UZ_MONTHS = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun",
 # Jadval bo'yicha guruhlarning mo'ljal vaqti (Toshkent soati, kasrli). C guruh
 # endi tezkor kuzatuvchi (har 15 daqiqa) -> u jadval emas, faol-soat oynasi bilan ishlaydi.
 GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "D": 10.0, "M": 11.0,
-                     "F": 9.0, "R": 21.0, "S": 22.0}   # F=o'yinlar, R=natijalar, S=jadval
+                     "F": 9.0, "R": 21.0, "S": 22.0, "P": 9.0}   # F=o'yinlar, R=natijalar, S=jadval, P=statistika
 # Mo'ljaldan keyin shu qancha soatgacha kechikkan run baribir post tashlaydi.
 # GitHub'ning odatdagi kechikishini yutish uchun saxiy, lekin tunni qoplamaydi.
 MAX_DELAY_HOURS = 5.0
@@ -1608,7 +1695,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         m_slots = slots_cfg.get("M")                  # bo'lsa M ko'p marta; bo'lmasa kuniga 1
         d_due = due_multi("D", now, daily_state, d_slots) if "D" in groups_on else []
         m_due = due_multi("M", now, daily_state, m_slots) if (m_slots and "M" in groups_on) else []
-        due = {g for g in ("A", "B", "F", "R", "S")
+        due = {g for g in ("A", "B", "F", "R", "S", "P")
                if g in groups_on and daily_due(g, now, daily_state)}
         # M: slotli kanal -> m_due; aks holda kuniga bir marta (daily_due)
         if "M" in groups_on and not m_slots and daily_due("M", now, daily_state):
@@ -1686,6 +1773,11 @@ def run_channel(now, date_label, group, cfg) -> list:
                 posted.append(_news_key(it))
         if fresh:
             save_posted(posted)
+
+    # --- P guruh: Startup uchun statistika (USD, Bitcoin, Yevro + yengil prognoz) ---
+    if want("P"):
+        results.append(post_startup_stats(date_label, focus=cfg.get("voice_focus")))
+        done_today.append("P")
 
     # --- G guruh: real-vaqt GOLLAR (jonli o'yinlarda hisob o'zgarsa GOOOL post) ---
     if want("G"):

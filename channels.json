@@ -27,7 +27,7 @@
     "name": "StartupNews | Amiriddinova",
     "channel": "@Startupnews_Amiriddinova",
     "token_env": "TELEGRAM_BOT_TOKEN",
-    "groups": ["C"],
+    "groups": ["C", "P"],
     "news_feeds": [
       ["https://www.spot.uz/uz/rss/", false],
       ["https://kun.uz/uz/rss", false],
