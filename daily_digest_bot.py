@@ -1462,11 +1462,12 @@ def post_breaking(item, translate=None, voice=None, focus=None) -> bool:
             title = translate_to_uz(title)
             if desc:
                 desc = translate_to_uz(desc[:300])
-        # Tavsif sarlavha bilan bir xil (yoki uning ichida) bo'lsa -> takrorni olib tashlaymiz
+        # Tavsif sarlavhaga mazmunan o'xshash bo'lsa -> takrorni olib tashlaymiz.
+        # So'zlar ustma-ustligi (token overlap) -> aniq nusxa emas, yaqin takror ham ushlanadi.
         if desc:
-            _norm = lambda s: re.sub(r"\W+", "", s).lower()
-            dn, tn = _norm(desc), _norm(title)
-            if dn and tn and (dn == tn or dn in tn or tn in dn):
+            _toks = lambda s: set(re.findall(r"\w+", (s or "").lower()))
+            td, tt = _toks(desc), _toks(title)
+            if td and tt and len(td & tt) / min(len(td), len(tt)) >= 0.6:
                 desc = ""
         body = _article_text(link) if voice == "blog" else ""   # to'liq matn -> batafsilroq
         blog = blogify(title, desc, body, focus or "") if voice == "blog" else None
@@ -1530,14 +1531,18 @@ def post_startup_stats(date_label, focus=None) -> bool:
             if yest_v:
                 d = usd - yest_v
                 if abs(d) >= 0.01:
-                    chg = f"  {'\u25b2' if d > 0 else '\u25bc'} {abs(d):,.0f}".replace(",", " ") + " so'm (kecha)"
+                    arrow = "\u25b2" if d > 0 else "\u25bc"   # f-string {} ichida emas (Py3.11 backslash taqiqi)
+                    chg = f"  {arrow} {abs(d):,.0f}".replace(",", " ") + " so'm (kecha)"
             lines.append(f"\U0001F4B5 Dollar (CBU): <b>{_fmt_sum(usd)}</b> so'm{chg}")
         if eur:
             lines.append(f"\U0001F4B6 Yevro: {_fmt_sum(eur)} so'm")
         if btc:
             bchg = btc.get("chg")
-            bc = (f"  {'\u25b2' if (bchg or 0) >= 0 else '\u25bc'} {abs(bchg):.1f}% (24s)"
-                  if bchg is not None else "")
+            if bchg is not None:
+                barrow = "\u25b2" if (bchg or 0) >= 0 else "\u25bc"
+                bc = f"  {barrow} {abs(bchg):.1f}% (24s)"
+            else:
+                bc = ""
             lines.append(f"\U0001FA99 Bitcoin: <b>${_fmt_usd(btc['usd'])}</b>{bc}")
 
         # --- yengil prognoz (deterministik, USD tarixidan) ---
