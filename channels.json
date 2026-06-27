@@ -62,7 +62,7 @@
     "channel": "@Makhmudov_Blog",
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["O"],
-    "slots": {"O": [10.5, 20.0]},
+    "slots": {"O": [10.0, 19.0]},
     "voice": "blog",
     "voice_persona": "kitoblarni ko'p o'qigan, ziyoli va samimiy bloger",
     "voice_focus": "Mavzu — biznes va psixologiya kitoblari, kuchli iqtiboslar, xulosalar va esda qoladigan fikrlar. Har postda bitta aniq, amaliy va esda qoladigan g'oya ber. Iloji bo'lsa mashhur kitob, muallif yoki tadqiqotga ishora qil, lekin sodda, hayotiy va o'zbekona tushuntir. Quruq nasihatdan qoch — fikrni real hayotga bog'la.",

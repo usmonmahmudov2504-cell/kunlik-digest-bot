@@ -1357,6 +1357,35 @@ def advice_caption(date_label, tip) -> str:
     return _finish(parts)
 
 
+# Viloyatlar (matnli dollar posti uchun) — Toshkent sh./vil. -> bitta "Toshkent".
+VILOYATLAR = ["Toshkent", "Andijon", "Buxoro", "Farg'ona", "Jizzax", "Namangan",
+              "Navoiy", "Qashqadaryo", "Qoraqalpog'iston", "Samarqand",
+              "Sirdaryo", "Surxondaryo", "Xorazm"]
+
+
+def regional_dollar_caption(date_label, banks) -> str | None:
+    """Viloyatlar bo'yicha dollar kursi — chiroyli tree-ko'rinishdagi MATNLI post.
+
+    Viloyat bo'yicha alohida kurs manbasi yo'q -> o'rtacha bank kursi hammaga bir xil
+    (uslubiy post). Banklar bo'lmasa None."""
+    valid = [x for x in banks if x.get("buy") and x.get("sell")]
+    if not valid:
+        return None
+    buys = sorted(x["buy"] for x in valid)
+    sells = sorted(x["sell"] for x in valid)
+    med_buy, med_sell = buys[len(buys) // 2], sells[len(sells) // 2]
+    rate = f"{med_buy:,} / {med_sell:,}".replace(",", " ")
+    parts = [f"⚡ <b>Bugungi dollar kursi</b> — {date_label}", "",
+             "<i>Olish / Sotish (so'm) · o'rtacha bank kursi</i>", ""]
+    dia = ["\U0001F537", "\U0001F536"]              # 🔷 🔶 navbatma-navbat
+    for i, v in enumerate(VILOYATLAR):
+        parts.append(f"├─ {dia[i % 2]} <b>{v}</b>")
+        parts.append(f"│  {rate}")
+    parts.append("")
+    parts.append(_tags("dollar"))
+    return _finish(parts)
+
+
 def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
     """Dollar posti caption: rasmiy kurs + eng yaxshi olish/sotish (to'liq jadval rasmda)."""
     extra_rates = extra_rates or []
@@ -1774,7 +1803,7 @@ UZ_MONTHS = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun",
 # Jadval bo'yicha guruhlarning mo'ljal vaqti (Toshkent soati, kasrli). C guruh
 # endi tezkor kuzatuvchi (har 15 daqiqa) -> u jadval emas, faol-soat oynasi bilan ishlaydi.
 GROUP_TARGET_HOUR = {"A": 7.0, "B": 7.5, "D": 10.0, "M": 11.0,
-                     "F": 9.0, "R": 21.0, "S": 22.0, "P": 9.0}   # F=o'yinlar, R=natijalar, S=jadval, P=statistika
+                     "F": 9.0, "R": 21.0, "S": 22.0, "P": 9.0, "V": 8.5}   # V=viloyatlar dollar (matn)
 # Mo'ljaldan keyin shu qancha soatgacha kechikkan run baribir post tashlaydi.
 # GitHub'ning odatdagi kechikishini yutish uchun saxiy, lekin tunni qoplamaydi.
 MAX_DELAY_HOURS = 5.0
@@ -1826,14 +1855,21 @@ def daily_due(group: str, now, daily_state: dict) -> bool:
 
 # Kurslar/Dollar kuniga bir necha marta chiqadi (kurs kun davomida o'zgaradi).
 D_SLOTS = (9.5, 13.0, 17.0)              # mo'ljal vaqtlari (Toshkent) -> 3 marta
-O_SLOTS = (11.5, 19.5)                    # original blog -> kuniga 2 marta (ertalab/kechqurun)
+O_SLOTS = (10.0, 19.0)                    # original blog oynalari boshi -> kuniga 2 marta (ertalab/kechqurun)
+# Original blog TABIIY ko'rinsin: aniq vaqtda emas, keng oynada tasodifiy chiqsin.
+# Har kuni boshqa daqiqa (sana-hash), lekin bir kun ichida barqaror -> heartbeat o'tkazib yubormaydi.
+O_JITTER_MIN = 120                        # slotdan keyin 0..2 soatgacha tasodifiy (10:00->10:00-12:00)
+O_WINDOW = 3.5                            # ushlash oynasi (jitterdan keyin ham yetarli vaqt qolsin)
 SLOT_WINDOW = 2.0                        # har slot oynasi (slotlar 3.5+ soat oralig'ida -> ustma-ust emas)
 
 
-def due_multi(group: str, now, daily_state: dict, slots) -> list:
-    """Ko'p slotli guruh (D/M...) uchun: bugun hali chiqmagan va vaqti kelgan slot indekslari.
+def due_multi(group: str, now, daily_state: dict, slots,
+              jitter_min: int = 40, window: float = SLOT_WINDOW) -> list:
+    """Ko'p slotli guruh (D/M/O...) uchun: bugun hali chiqmagan va vaqti kelgan slot indekslari.
 
-    Holatda har slot alohida belgilanadi: "<group><i>" (mas. "D0", "M1").
+    jitter_min -> slotdan keyingi tasodifiy ofset (daqiqa). Katta bo'lsa -> vaqt tabiiyroq.
+    window     -> ushlash oynasi (jitterdan kichik bo'lmasligi kerak, aks holda o'tkazib yuboradi).
+    Holatda har slot alohida belgilanadi: "<group><i>" (mas. "D0", "M1", "O0").
     """
     cur = now.hour + now.minute / 60.0
     today = now.strftime("%Y-%m-%d")
@@ -1841,7 +1877,7 @@ def due_multi(group: str, now, daily_state: dict, slots) -> list:
     for i, slot in enumerate(slots):
         if daily_state.get(f"{group}{i}") == today:
             continue
-        if slot + _jitter_h(now, f"{group}{i}|{CHANNEL_KEY}") <= cur <= slot + SLOT_WINDOW:
+        if slot + _jitter_h(now, f"{group}{i}|{CHANNEL_KEY}", jitter_min) <= cur <= slot + window:
             out.append(i)
     return out
 
@@ -1863,8 +1899,9 @@ def run_channel(now, date_label, group, cfg) -> list:
         o_slots = slots_cfg.get("O", list(O_SLOTS))   # original blog: standart kuniga 2 marta
         d_due = due_multi("D", now, daily_state, d_slots) if "D" in groups_on else []
         m_due = due_multi("M", now, daily_state, m_slots) if (m_slots and "M" in groups_on) else []
-        o_due = due_multi("O", now, daily_state, o_slots) if "O" in groups_on else []
-        due = {g for g in ("A", "B", "F", "R", "S", "P")
+        o_due = due_multi("O", now, daily_state, o_slots,
+                          jitter_min=O_JITTER_MIN, window=O_WINDOW) if "O" in groups_on else []
+        due = {g for g in ("A", "B", "F", "R", "S", "P", "V")
                if g in groups_on and daily_due(g, now, daily_state)}
         # M: slotli kanal -> m_due; aks holda kuniga bir marta (daily_due)
         if "M" in groups_on and not m_slots and daily_due("M", now, daily_state):
