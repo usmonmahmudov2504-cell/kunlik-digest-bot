@@ -44,6 +44,10 @@ from render_card import (
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
 # Bo'lmasa -> oddiy shablon ishlatiladi (bepul, hammasi baribir ishlaydi).
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+# Gemini (Google AI Studio) kaliti — IXTIYORIY, bepul tarif. Bo'lsa tarjima/caption
+# uchun BIRINCHI ishlatiladi (Claude'dan oldin). Model env orqali o'zgartiriladi.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 # Token/kanal: bitta kanal bo'lsa env'dan; ko'p kanal bo'lsa channels.json'dan
 # (har kanal uchun run_channel() ichida qayta o'rnatiladi). .get -> import qulashmaydi.
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -453,27 +457,62 @@ def _translate_google(text: str, target: str = "uz") -> str:
         return text
 
 
-def translate_to_uz(text: str) -> str:
-    """Sarlavhani tabiiy O'zbek (lotin) tiliga tarjima qiladi.
+def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
+    """Gemini REST (bepul tarif). Kalit yo'q / bloklangan / xato -> None."""
+    if not GEMINI_API_KEY:
+        return None
+    try:
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}")
+        body = {"contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
+        r = requests.post(url, json=body, timeout=25)
+        if r.status_code != 200:
+            print(f"Gemini {r.status_code}: {r.text[:150]}")
+            return None
+        cands = (r.json().get("candidates") or [])
+        if not cands:
+            return None
+        parts = (cands[0].get("content") or {}).get("parts") or []
+        txt = "".join(p.get("text", "") for p in parts).strip()
+        return txt or None
+    except Exception as e:
+        print("Gemini xato:", e)
+        return None
 
-    Avval Claude (ANTHROPIC_API_KEY bo'lsa) -> sifatliroq; bo'lmasa yoki xato bersa
-    bepul Google Translate zaxirasi ishlaydi. Ikkalasi ham yiqilsa original qoladi."""
-    if not text:
-        return text
+
+def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
+    """Matn generatsiya: avval Gemini (bepul), keyin Claude. Ikkalasi yo'q/xato -> None."""
+    t = _gemini_generate(prompt, max_tokens)
+    if t:
+        return t
     if client is not None:
         try:
             resp = client.messages.create(
-                model="claude-sonnet-4-6", max_tokens=200,
-                messages=[{"role": "user", "content":
-                           "Quyidagi sport/futbol yangiligi sarlavhasini tabiiy, jonli O'zbek "
-                           "tiliga (lotin alifbosida) tarjima qil. Faqat tarjimani qaytar, "
-                           f"izoh va qo'shtirnoqsiz:\n\n{text}"}])
-            t = "".join(b.text for b in resp.content if b.type == "text").strip().strip('"«»')
-            if t:
-                return t
+                model="claude-sonnet-4-6", max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}])
+            return "".join(b.text for b in resp.content if b.type == "text").strip() or None
         except Exception as e:
-            print("Claude tarjima xato, Google'ga o'tildi:", e)
-    return _translate_google(text, "uz")
+            print("Claude xato:", e)
+    return None
+
+
+def translate_to_uz(text: str) -> str:
+    """Sarlavhani tabiiy O'zbek (lotin) tiliga tarjima qiladi.
+
+    Tartib: Gemini -> Claude -> bepul Google Translate. Hammasi yiqilsa original qoladi.
+    Shu sabab kanal hech qachon ruscha/tarjimasiz chiqib qolmaydi."""
+    if not text:
+        return text
+    prompt = ("Quyidagi sport/futbol yangiligi sarlavhasini tabiiy, jonli O'zbek "
+              "tiliga (lotin alifbosida) tarjima qil. Faqat tarjimani qaytar, "
+              f"izoh va qo'shtirnoqsiz:\n\n{text}")
+    t = llm_text(prompt, 200)        # Gemini -> Claude
+    if t:
+        t = t.strip().strip('"«»').strip()
+        if t:
+            return t
+    return _translate_google(text, "uz")   # oxirgi zaxira (bepul, kalitsiz)
 
 
 # ------------------------------------------------------------------ FUTBOL (JCH-2026)
@@ -1082,23 +1121,18 @@ def day_caption(date_label, info) -> str:
     parts.append("Xayrli kun tilaymiz!")
     text = "\n".join(parts)
 
-    if client is not None:                 # B rejimi: kalit bo'lsa Claude boyitadi
-        try:
-            hol = ", ".join(info["holidays"]) or "maxsus bayram yo'q"
-            prompt = (
-                f"Bugun {date_label}, {info['weekday']}, {info['season']} fasli. "
-                f"Bayram/sana: {hol}. Telegram 'Bugun qanaqa kun' posti uchun QISQA, "
-                "qiziqarli caption yoz (o'zbekcha, Telegram HTML faqat <b>, 600 belgidan kam). "
-                "Tuzilishi: emoji bilan sarlavha; sana/fasl; agar bayram bo'lsa u haqida 1 jumla "
-                "qiziqarli fakt; oxirida xayrli kun tilagi. Faqat matnni qaytar."
-            )
-            resp = client.messages.create(
-                model="claude-sonnet-4-6", max_tokens=600,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = "".join(b.text for b in resp.content if b.type == "text").strip() or text
-        except Exception as e:
-            print("Claude caption xato (bugun):", e)
+    # Kalit (Gemini yoki Claude) bo'lsa caption boyitiladi; bo'lmasa shablon qoladi.
+    hol = ", ".join(info["holidays"]) or "maxsus bayram yo'q"
+    prompt = (
+        f"Bugun {date_label}, {info['weekday']}, {info['season']} fasli. "
+        f"Bayram/sana: {hol}. Telegram 'Bugun qanaqa kun' posti uchun QISQA, "
+        "qiziqarli caption yoz (o'zbekcha, Telegram HTML faqat <b>, 600 belgidan kam). "
+        "Tuzilishi: emoji bilan sarlavha; sana/fasl; agar bayram bo'lsa u haqida 1 jumla "
+        "qiziqarli fakt; oxirida xayrli kun tilagi. Faqat matnni qaytar."
+    )
+    enriched = llm_text(prompt, 600)       # Gemini -> Claude
+    if enriched:
+        text = enriched
     text += "\n\n" + _tags("day")
     return _append_footer(text)
 

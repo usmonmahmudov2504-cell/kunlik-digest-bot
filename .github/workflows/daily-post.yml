@@ -43,6 +43,7 @@ jobs:
         env:
           POST_GROUP: ${{ steps.grp.outputs.group }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
           FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
