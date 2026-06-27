@@ -433,22 +433,47 @@ def get_business_news(limit: int = 5) -> list[dict]:
     return get_news(BUSINESS_FEEDS, BIZ_KW, limit)
 
 
-def translate_to_uz(text: str) -> str:
-    """Sarlavhani tabiiy O'zbek (lotin) tiliga tarjima qiladi. Claude bo'lmasa o'zicha qoladi."""
-    if not text or client is None:
+def _translate_google(text: str, target: str = "uz") -> str:
+    """Bepul, kalitsiz Google Translate endpoint. Xato bo'lsa -> original matn.
+
+    ANTHROPIC_API_KEY bo'lmasa ham (yoki Claude xato bersa) rus/boshqa til
+    o'zbekchaga o'giriladi -> kanal hech qachon ruscha chiqib qolmaydi."""
+    if not text:
         return text
     try:
-        resp = client.messages.create(
-            model="claude-sonnet-4-6", max_tokens=200,
-            messages=[{"role": "user", "content":
-                       "Quyidagi sport/futbol yangiligi sarlavhasini tabiiy, jonli O'zbek "
-                       "tiliga (lotin alifbosida) tarjima qil. Faqat tarjimani qaytar, "
-                       f"izoh va qo'shtirnoqsiz:\n\n{text}"}])
-        t = "".join(b.text for b in resp.content if b.type == "text").strip()
-        return t.strip('"«»') or text
+        r = requests.get(
+            "https://translate.googleapis.com/translate_a/single",
+            params={"client": "gtx", "sl": "auto", "tl": target, "dt": "t", "q": text},
+            headers=UA_WEB, timeout=15)
+        data = r.json()
+        out = "".join(seg[0] for seg in data[0] if seg and seg[0]).strip()
+        return out or text
     except Exception as e:
-        print("Tarjima xato:", e)
+        print("Google tarjima xato:", e)
         return text
+
+
+def translate_to_uz(text: str) -> str:
+    """Sarlavhani tabiiy O'zbek (lotin) tiliga tarjima qiladi.
+
+    Avval Claude (ANTHROPIC_API_KEY bo'lsa) -> sifatliroq; bo'lmasa yoki xato bersa
+    bepul Google Translate zaxirasi ishlaydi. Ikkalasi ham yiqilsa original qoladi."""
+    if not text:
+        return text
+    if client is not None:
+        try:
+            resp = client.messages.create(
+                model="claude-sonnet-4-6", max_tokens=200,
+                messages=[{"role": "user", "content":
+                           "Quyidagi sport/futbol yangiligi sarlavhasini tabiiy, jonli O'zbek "
+                           "tiliga (lotin alifbosida) tarjima qil. Faqat tarjimani qaytar, "
+                           f"izoh va qo'shtirnoqsiz:\n\n{text}"}])
+            t = "".join(b.text for b in resp.content if b.type == "text").strip().strip('"«»')
+            if t:
+                return t
+        except Exception as e:
+            print("Claude tarjima xato, Google'ga o'tildi:", e)
+    return _translate_google(text, "uz")
 
 
 # ------------------------------------------------------------------ FUTBOL (JCH-2026)
