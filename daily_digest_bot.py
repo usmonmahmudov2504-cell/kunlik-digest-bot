@@ -541,6 +541,10 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
         "- Ko'pi bilan 2-3 mos emoji ishlat, ortiqcha emas.\n"
         "- HTML, markdown, yulduzcha (*) yoki sarlavha ishlatma. Faqat oddiy matn.\n"
         "- Manba nomi, havola yoki sayt nomini (techcrunch, championat va h.k.) yozma.\n"
+        "- MUHIM (qat'iy): faqat manbadagi HAQIQIY ma'lumotga tayan. O'zingdan TO'QIMA "
+        "voqea, soxta do'st/tanish ('bir do'stim bor'), 'menga savol berishadi' kabi yolg'on "
+        "shaxsiy hikoya, to'qima raqam, statistika yoki iqtibos YOZMA. Umumiy fikr/baho "
+        "berishing mumkin, lekin uni real voqea sifatida to'qib ko'rsatma.\n"
         + focus_line +
         "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
         f"Yangilik:\n{src}\n\nPost:"
@@ -1723,12 +1727,13 @@ BLOG_THEMES = [
 ]
 
 # Format xilma-xilligi -> postlar bir xil ko'rinmasin, tirik tuyulsin.
+# DIQQAT: hech qaysi format to'qima shaxsiy voqea ('bir do'stim bor') talab qilmasin.
 BLOG_FORMATS = [
-    "qisqa esse (2-3 abzas), shaxsiy kuzatuv yoki hikoyacha bilan",
+    "qisqa, chuqur esse (2-3 abzas) \u2014 bitta aniq g'oya haqida",
     "3-4 ta amaliy maslahat, har biri bitta jonli izoh bilan",
-    "bitta kuchli fikr atrofida chuqur mulohaza (2 qisqa abzas)",
-    "shaxsiy refleksiya \u2014 'men shuni angladim...' ohangida",
-    "bitta hayotiy savol va unga ochiq, samimiy javob",
+    "bitta kuchli, haqiqiy printsip atrofida mulohaza (2 qisqa abzas)",
+    "umumiy hayotiy kuzatuv va undan amaliy xulosa (to'qima voqeasiz)",
+    "bitta o'ylantiruvchi savol va unga samimiy, asosli javob",
 ]
 
 
@@ -1752,11 +1757,16 @@ def post_original_blog(focus=None, themes=None, persona=None) -> bool:
             f"Sen O'zbek tilida (lotin alifbosida) yozadigan {who}san. "
             "O'quvching \u2014 fikrlaydigan, o'zini rivojlantirishni istagan odamlar.\n"
             f"Bugun '{theme}' mavzusida ORIGINAL post yoz \u2014 hech qaysi yangilikka bog'lanmagan, "
-            "faqat o'z fikring va tajribang.\n"
+            "o'z qarashing va chuqur bilimingdan kelib chiqib.\n"
             f"Format: {fmt}.\n"
             "Talablar:\n"
             "- Tirik, insoniy, samimiy ohang; xuddi bir odam o'z kanalida yozayotgandek.\n"
             "- Aniq, foydali va chuqur bo'l; quruq, umumiy iboralardan qoch.\n"
+            "- MUHIM (qat'iy): TO'QIMA shaxsiy voqea, soxta do'st/tanish ('bir do'stim bor'), "
+            "yolg'on 'men shunday qildim' hikoyasi, to'qima raqam yoki iqtibos KELTIRMA. "
+            "Shaxsiy QARASH/fikr ('menimcha') mumkin, lekin soxta voqeani haqiqatdek ko'rsatma. "
+            "Kitob, muallif yoki iqtibosga ishora qilsang \u2014 faqat ROSTDAN aniq bilganingni yoz; "
+            "ishonching komil bo'lmasa, umumiy fikr bilan cheklan, nom to'qima.\n"
             "- Kuchli birinchi jumla bilan boshla; oxirida kichik xulosa yoki o'ylantiruvchi savol qoldir.\n"
             "- 90-160 so'z. Faqat oddiy matn \u2014 HTML, markdown yoki yulduzcha (*) ishlatma.\n"
             "- 1-3 ta mos emoji bo'lsa bo'ladi, ortiqcha emas.\n"
@@ -2154,13 +2164,11 @@ def main() -> None:
     # POST_GROUP: AUTO (heartbeat har 15 daq) | A/B/C/D/M | ALL (qo'lda test)
     group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
 
-    # LLM diagnostikasi (faqat qo'lda/FORCE run) -> blog ovozi ishlayaptimi log'da aniq ko'rinadi.
+    # LLM kalit holati (faqat qo'lda/FORCE run) -> log'da ko'rinsin. Kvota isrof bo'lmasligi
+    # uchun bu yerda SINOV chaqirig'i YO'Q -> haqiqiy xatolar baribir blogify/blog log'ida chiqadi.
     if os.environ.get("FORCE_POST"):
         print(f"LLM kalitlari: GEMINI={'bor' if GEMINI_API_KEY else 'yoq'} "
               f"(modellar: {', '.join(GEMINI_MODELS)}) | ANTHROPIC={'bor' if client else 'yoq'}")
-        _t = llm_text("Faqat 'OK' deb javob yoz.", max_tokens=5)
-        print("LLM SINOV: " + ("✅ ishladi -> " + repr(_t) if _t
-                                else "❌ ISHLAMADI (yuqorida 'Gemini ...' xato qatoriga qarang)"))
 
     # Darvoza: faol oynadan tashqarida (tunda) -> hech kanalga post yo'q. Xato emas (exit 0).
     if not within_window(group, now):
