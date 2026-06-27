@@ -497,6 +497,33 @@ def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
     return None
 
 
+def blogify(title: str, desc: str = "") -> str | None:
+    """Yangilikni bir kishi yuritayotgan shaxsiy blog ovozida, tabiiy O'zbekchaga aylantiradi.
+
+    voice="blog" kanallari uchun. LLM yo'q/xato -> None (chaqiruvchi standart formatga qaytadi).
+    """
+    src = title.strip() + (("\n" + desc.strip()) if desc else "")
+    prompt = (
+        "Sen O'zbek tilida (lotin alifbosida) yozadigan zamonaviy startap, AI va "
+        "texnologiya blogerisan. Quyidagi xorijiy yangilik asosida o'z shaxsiy kanalingga "
+        "qisqa post yoz. Talablar:\n"
+        "- Tabiiy, jonli, suhbatdek ohang; xuddi bir odam o'z bloggini yuritayotgandek.\n"
+        "- Ozgina shaxsiy fikr yoki qiziqish qo'sh (nega bu qiziq yoki muhim).\n"
+        "- 3-5 jumla, 1-2 abzas. Quruq xabarchilik, rasmiy uslub yoki reklama emas.\n"
+        "- Ko'pi bilan 1-2 mos emoji ishlat, ortiqcha emas.\n"
+        "- HTML, markdown, yulduzcha (*) yoki sarlavha ishlatma. Faqat oddiy matn.\n"
+        "- Manba nomi, havola yoki sayt nomini (techcrunch, gazeta va h.k.) yozma.\n"
+        "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
+        f"Yangilik:\n{src}\n\nPost:"
+    )
+    out = llm_text(prompt, max_tokens=400)
+    if not out:
+        return None
+    out = out.strip().strip('"').strip()
+    out = out.replace("**", "").replace("__", "").replace("*", "")
+    return out or None
+
+
 def translate_to_uz(text: str) -> str:
     """Sarlavhani tabiiy O'zbek (lotin) tiliga tarjima qiladi.
 
@@ -513,6 +540,26 @@ def translate_to_uz(text: str) -> str:
         if t:
             return t
     return _translate_google(text, "uz")   # oxirgi zaxira (bepul, kalitsiz)
+
+
+def translate_paras_uz(paras: list[str]) -> list[str]:
+    """Paragraflar ro'yxatini o'zbekchaga tarjima qiladi (Instant View ichi uchun).
+
+    Avval LLM (Gemini -> Claude) butun matnni BITTA chaqiruvda tarjima qiladi
+    (paragraf tuzilishini saqlaydi); bo'lmasa har paragraf bepul Google bilan."""
+    paras = [p for p in paras if p and p.strip()]
+    if not paras:
+        return paras
+    joined = "\n\n".join(paras)
+    prompt = ("Quyidagi yangilik matnini tabiiy, ravon O'zbek tiliga (lotin alifbosida) "
+              "tarjima qil. Har bir paragrafni bo'sh qator bilan ajratib saqla, "
+              "paragraflar sonini o'zgartirma. Faqat tarjimani qaytar, izohsiz:\n\n" + joined)
+    out = llm_text(prompt, 4096)
+    if out:
+        parts = [p.strip() for p in out.split("\n\n") if p.strip()]
+        if parts:
+            return parts
+    return [_translate_google(p, "uz") for p in paras]   # zaxira: bittalab (bepul)
 
 
 # ------------------------------------------------------------------ FUTBOL (JCH-2026)
@@ -837,9 +884,10 @@ def _telegraph_token():
     return _TG_TOKEN
 
 
-def make_instant_view(item) -> str | None:
+def make_instant_view(item, translate=None) -> str | None:
     """Maqolani telegra.ph sahifasiga ko'chiradi va URL qaytaradi (Instant View).
 
+    translate="uz" -> sarlavha va butun maqola matni o'zbekchaga tarjima qilinadi.
     Xato bo'lsa None (u holda tugma oddiy maqola havolasiga tushadi)."""
     link = item.get("link") if isinstance(item, dict) else None
     title = (item.get("title") if isinstance(item, dict) else item) or "Xabar"
@@ -868,6 +916,9 @@ def make_instant_view(item) -> str | None:
                 break
         if not paras:
             paras = [title]
+        if translate == "uz":                  # IV ichini ham o'zbekchaga o'giramiz
+            title = translate_to_uz(title)
+            paras = translate_paras_uz(paras)
         content = []
         if img:
             content.append({"tag": "figure", "children": [{"tag": "img", "attrs": {"src": img}}]})
@@ -1359,9 +1410,10 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
             resp2.raise_for_status()
 
 
-def post_breaking(item, translate=None) -> bool:
+def post_breaking(item, translate=None, voice=None) -> bool:
     """Tezkor xabar (toza): rasm tepada + qisqa matn + pastda "Instant View" tugma.
 
+    voice="blog" -> matn bir kishi yuritayotgan shaxsiy blog ovozida qayta yoziladi.
     Tugma telegra.ph IV sahifasini ochadi (to'liq maqola, ichida rasm bilan).
     """
     try:
@@ -1372,16 +1424,23 @@ def post_breaking(item, translate=None) -> bool:
             title = translate_to_uz(title)
             if desc:
                 desc = translate_to_uz(desc[:300])
-        # Caption: sarlavha (+ qisqa tavsif) + bitta toza kanal qatori
-        cap = f"\u26a1 <b>{html.escape(title, quote=False)}</b>"
-        if desc:
-            cap += f"\n\n{html.escape(desc[:400], quote=False)}"
+        blog = blogify(title, desc) if voice == "blog" else None
+        if blog:
+            # Shaxsiy blog ovozi: AI yozgan tabiiy matn (HTML teglarsiz, xavfsiz)
+            cap = html.escape(blog, quote=False)
+        else:
+            # Standart: sarlavha (+ qisqa tavsif)
+            cap = f"\u26a1 <b>{html.escape(title, quote=False)}</b>"
+            if desc:
+                cap += f"\n\n{html.escape(desc[:400], quote=False)}"
         ch = str(TELEGRAM_CHANNEL).strip()
-        if ch.startswith("@"):
+        if ch.startswith("@") and voice == "blog":
+            cap += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+        elif ch.startswith("@"):
             cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
                     " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
-        # Instant View sahifasi + pastdagi tugma
-        iv_url = make_instant_view(item) or link
+        # Instant View sahifasi + pastdagi tugma (translate -> ichi ham o'zbekcha)
+        iv_url = make_instant_view(item, translate=translate) or link
         button = ({"inline_keyboard": [[{"text": "\u26a1 Instant View", "url": iv_url}]]}
                   if iv_url else None)
         img = fetch_news_image([item], "news_banner.png")
@@ -1562,6 +1621,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         feeds = cfg.get("news_feeds", preset["feeds"])
         kw = cfg.get("news_keywords", preset["keywords"])
         translate = cfg.get("translate")      # masalan "uz" -> ruscha sarlavhani tarjima
+        voice = cfg.get("voice")              # "blog" -> shaxsiy blog ovozida qayta yozish
         news = get_news(feeds, kw, limit=10)
         posted = load_posted()
         seen = set(posted)
@@ -1570,7 +1630,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         if not fresh:
             print("Yangi xabar yo'q (takror oldini olindi).")
         for it in fresh:
-            ok = post_breaking(it, translate=translate)
+            ok = post_breaking(it, translate=translate, voice=voice)
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
