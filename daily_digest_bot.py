@@ -1627,6 +1627,83 @@ def post_startup_stats(date_label, focus=None) -> bool:
         return False
 
 
+# Original blog mavzulari (aylanma) \u2014 yangilikka bog'liq emas, bloggerning o'z fikri.
+BLOG_THEMES = [
+    "biznes strategiyasi va barqaror o'sish",
+    "marketing, brending va mijoz psixologiyasi",
+    "shaxsiy rivojlanish, odatlar va o'z ustida ishlash",
+    "karyera o'sishi va kasbiy mahorat",
+    "munosabatlar, networking va kuchli jamoa qurish",
+    "startap yo'li: sinov, xato va saboqlar",
+    "ichki kechinmalar va o'z-o'zini anglash (refleksiya)",
+    "donolik va hayotiy aqlli fikrlar",
+    "motivatsiya, intizom va maqsadga sodiqlik",
+    "liderlik va og'ir qarorlar qabul qilish",
+    "vaqtni boshqarish, fokus va produktivlik",
+    "muvaffaqiyatsizlikni qabul qilish va undan o'sish",
+    "moliyaviy savodxonlik va pulni oqilona boshqarish",
+    "ijodkorlik va g'oyani amalga aylantirish",
+]
+
+# Format xilma-xilligi -> postlar bir xil ko'rinmasin, tirik tuyulsin.
+BLOG_FORMATS = [
+    "qisqa esse (2-3 abzas), shaxsiy kuzatuv yoki hikoyacha bilan",
+    "3-4 ta amaliy maslahat, har biri bitta jonli izoh bilan",
+    "bitta kuchli fikr atrofida chuqur mulohaza (2 qisqa abzas)",
+    "shaxsiy refleksiya \u2014 'men shuni angladim...' ohangida",
+    "bitta hayotiy savol va unga ochiq, samimiy javob",
+]
+
+
+def post_original_blog(focus=None, themes=None) -> bool:
+    """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
+
+    Aylanma mavzu + format; yaqinda ishlatilganini takrorlamaydi (blog_state.json).
+    LLM (Gemini->Claude) bo'lmasa -> post yo'q (False), bot davom etadi.
+    """
+    try:
+        pool = themes or BLOG_THEMES
+        st = _load_json("blog_state.json", {})
+        recent = st.get("recent", [])
+        choices = [t for t in pool if t not in recent[-6:]] or pool
+        theme = random.choice(choices)
+        fmt = random.choice(BLOG_FORMATS)
+        focus_line = (f"Kanal yo'nalishi (e'tiborga ol): {focus}\n" if focus else "")
+        prompt = (
+            "Sen O'zbek tilida (lotin alifbosida) yozadigan tajribali, samimiy bloggersan. "
+            "O'quvching \u2014 startap, biznes va shaxsiy rivojlanishga qiziquvchi yoshlar.\n"
+            f"Bugun '{theme}' mavzusida ORIGINAL post yoz \u2014 hech qaysi yangilikka bog'lanmagan, "
+            "faqat o'z fikring va tajribang.\n"
+            f"Format: {fmt}.\n"
+            "Talablar:\n"
+            "- Tirik, insoniy, samimiy ohang; xuddi bir odam o'z kanalida yozayotgandek.\n"
+            "- Aniq, foydali va chuqur bo'l; quruq, umumiy iboralardan qoch.\n"
+            "- Kuchli birinchi jumla bilan boshla; oxirida kichik xulosa yoki o'ylantiruvchi savol qoldir.\n"
+            "- 90-160 so'z. Faqat oddiy matn \u2014 HTML, markdown yoki yulduzcha (*) ishlatma.\n"
+            "- 1-3 ta mos emoji bo'lsa bo'ladi, ortiqcha emas.\n"
+            "- Sarlavha yoki 'Mavzu:' yozma \u2014 to'g'ridan-to'g'ri post matnini ber.\n"
+            + focus_line
+        )
+        text = llm_text(prompt, max_tokens=900)
+        if not text:
+            print("Original blog: LLM javob bermadi (Gemini/Claude).")
+            return False
+        text = text.strip().strip('"').replace("**", "").replace("__", "").replace("*", "").strip()
+        body = html.escape(text[:1600], quote=False)
+        ch = str(TELEGRAM_CHANNEL).strip()
+        if ch.startswith("@"):
+            body += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+        post_message(body, link_preview={"is_disabled": True})
+        recent.append(theme)
+        st["recent"] = recent[-10:]
+        _save_json("blog_state.json", st)
+        print(f"Original blog \u2713 ({theme})")
+        return True
+    except Exception as e:
+        print(f"Original blog XATO: {e}")
+        return False
+
+
 def safe_post(render_fn, caption, label):
     """Bitta post xato bersa, butun ishni to'xtatmaydi."""
     try:
@@ -1700,6 +1777,7 @@ def daily_due(group: str, now, daily_state: dict) -> bool:
 
 # Kurslar/Dollar kuniga bir necha marta chiqadi (kurs kun davomida o'zgaradi).
 D_SLOTS = (9.5, 13.0, 17.0)              # mo'ljal vaqtlari (Toshkent) -> 3 marta
+O_SLOTS = (11.5, 19.5)                    # original blog -> kuniga 2 marta (ertalab/kechqurun)
 SLOT_WINDOW = 2.0                        # har slot oynasi (slotlar 3.5+ soat oralig'ida -> ustma-ust emas)
 
 
@@ -1750,15 +1828,19 @@ def run_channel(now, date_label, group, cfg) -> list:
             due.add("G")
         if d_due:
             due.add("D")
+        if o_due:
+            due.add("O")
         print(f"  [{ch}] {now.hour:02d}:{now.minute:02d} -> {sorted(due)}"
               + (f" (D-slot {d_due})" if d_due else "")
-              + (f" (M-slot {m_due})" if m_due else ""))
+              + (f" (M-slot {m_due})" if m_due else "")
+              + (f" (O-slot {o_due})" if o_due else ""))
 
         def want(g):
             return g in due
     else:
         d_due = [0]   # qo'lda: D bir marta
         m_due = [0]   # qo'lda: M bir marta
+        o_due = [0]   # qo'lda: original blog bir marta
         def want(g):
             return (group == "ALL" or group == g) and g in groups_on
 
@@ -1821,6 +1903,15 @@ def run_channel(now, date_label, group, cfg) -> list:
     if want("P"):
         results.append(post_startup_stats(date_label, focus=cfg.get("voice_focus")))
         done_today.append("P")
+
+    # --- O guruh: Original blog (yangilikka bog'liq emas — biznes, motivatsiya, ...) ---
+    if want("O"):
+        results.append(post_original_blog(focus=cfg.get("voice_focus"),
+                                          themes=cfg.get("blog_themes")))
+        if group == "AUTO":
+            for i in o_due:
+                daily_state[f"O{i}"] = today
+            state_changed = True
 
     # --- G guruh: real-vaqt GOLLAR (jonli o'yinlarda hisob o'zgarsa GOOOL post) ---
     if want("G"):
