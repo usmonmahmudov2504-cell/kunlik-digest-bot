@@ -46,8 +46,12 @@ from render_card import (
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 # Gemini (Google AI Studio) kaliti — IXTIYORIY, bepul tarif. Bo'lsa tarjima/caption
 # uchun BIRINCHI ishlatiladi (Claude'dan oldin). Model env orqali o'zgartiriladi.
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()   # secret'dagi bo'shliq/yangi qatorni kesamiz
+# DIQQAT: gemini-2.0-flash 2026-06-01 da o'chirilgan. Bir nechta amaldagi modelni ketma-ket
+# sinaymiz -> biri ishlamasa (404/limit) keyingisiga o'tadi. GEMINI_MODEL berilsa -> birinchi sinaladi.
+_GEMINI_USER = os.environ.get("GEMINI_MODEL", "").strip()
+GEMINI_MODELS = list(dict.fromkeys(([_GEMINI_USER] if _GEMINI_USER else []) + [
+    "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-3.5-flash"]))
 # Token/kanal: bitta kanal bo'lsa env'dan; ko'p kanal bo'lsa channels.json'dan
 # (har kanal uchun run_channel() ichida qayta o'rnatiladi). .get -> import qulashmaydi.
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -460,27 +464,37 @@ def _translate_google(text: str, target: str = "uz") -> str:
 
 
 def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
-    """Gemini REST (bepul tarif). Kalit yo'q / bloklangan / xato -> None."""
+    """Gemini REST (bepul tarif). Amaldagi modellarni ketma-ket sinaydi.
+
+    Model 404 (o'chirilgan/noma'lum) yoki 429 (limit) -> keyingi modelga o'tadi.
+    400 (kalit xato) / 403 (API yoqilmagan) -> boshqa model yordam bermaydi, to'xtaydi.
+    """
     if not GEMINI_API_KEY:
+        print("Gemini: kalit yo'q (GEMINI_API_KEY o'rnatilmagan).")
         return None
-    try:
-        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}")
-        body = {"contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
-        r = requests.post(url, json=body, timeout=25)
-        if r.status_code != 200:
-            print(f"Gemini {r.status_code}: {r.text[:150]}")
-            return None
-        cands = (r.json().get("candidates") or [])
-        if not cands:
-            return None
-        parts = (cands[0].get("content") or {}).get("parts") or []
-        txt = "".join(p.get("text", "") for p in parts).strip()
-        return txt or None
-    except Exception as e:
-        print("Gemini xato:", e)
-        return None
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
+    for model in GEMINI_MODELS:
+        try:
+            url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+                   f"{model}:generateContent?key={GEMINI_API_KEY}")
+            r = requests.post(url, json=body, timeout=25)
+            if r.status_code != 200:
+                print(f"Gemini [{model}] {r.status_code}: {r.text[:160]}")
+                if r.status_code in (400, 403):     # kalit/ruxsat muammosi -> boshqa model befoyda
+                    break
+                continue                            # 404/429/5xx -> keyingi modelni sinab ko'ramiz
+            cands = (r.json().get("candidates") or [])
+            if not cands:
+                print(f"Gemini [{model}]: nomzod yo'q (ehtimol xavfsizlik bloki).")
+                continue
+            parts = (cands[0].get("content") or {}).get("parts") or []
+            txt = "".join(p.get("text", "") for p in parts).strip()
+            if txt:
+                return txt
+        except Exception as e:
+            print(f"Gemini [{model}] xato:", e)
+    return None
 
 
 def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
@@ -1927,7 +1941,7 @@ def main() -> None:
     # LLM diagnostikasi (faqat qo'lda/FORCE run) -> blog ovozi ishlayaptimi log'da aniq ko'rinadi.
     if os.environ.get("FORCE_POST"):
         print(f"LLM kalitlari: GEMINI={'bor' if GEMINI_API_KEY else 'yoq'} "
-              f"(model {GEMINI_MODEL}) | ANTHROPIC={'bor' if client else 'yoq'}")
+              f"(modellar: {', '.join(GEMINI_MODELS)}) | ANTHROPIC={'bor' if client else 'yoq'}")
         _t = llm_text("Faqat 'OK' deb javob yoz.", max_tokens=5)
         print("LLM SINOV: " + ("✅ ishladi -> " + repr(_t) if _t
                                 else "❌ ISHLAMADI (yuqorida 'Gemini ...' xato qatoriga qarang)"))
