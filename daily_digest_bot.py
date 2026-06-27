@@ -1901,6 +1901,14 @@ def main() -> None:
     # POST_GROUP: AUTO (heartbeat har 15 daq) | A/B/C/D/M | ALL (qo'lda test)
     group = os.environ.get("POST_GROUP", "all").strip().upper() or "ALL"
 
+    # LLM diagnostikasi (faqat qo'lda/FORCE run) -> blog ovozi ishlayaptimi log'da aniq ko'rinadi.
+    if os.environ.get("FORCE_POST"):
+        print(f"LLM kalitlari: GEMINI={'bor' if GEMINI_API_KEY else 'yoq'} "
+              f"(model {GEMINI_MODEL}) | ANTHROPIC={'bor' if client else 'yoq'}")
+        _t = llm_text("Faqat 'OK' deb javob yoz.", max_tokens=5)
+        print("LLM SINOV: " + ("✅ ishladi -> " + repr(_t) if _t
+                                else "❌ ISHLAMADI (yuqorida 'Gemini ...' xato qatoriga qarang)"))
+
     # Darvoza: faol oynadan tashqarida (tunda) -> hech kanalga post yo'q. Xato emas (exit 0).
     if not within_window(group, now):
         print(f"Guruh {group}: faol oynadan tashqarida ({now.hour:02d}:{now.minute:02d} "
