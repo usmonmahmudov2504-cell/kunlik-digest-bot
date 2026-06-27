@@ -55,6 +55,7 @@ TELEGRAM_CHANNEL = os.environ.get("TELEGRAM_CHANNEL", "")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CHANNEL_KEY = "default"        # joriy kanal kaliti (state/<key>/ papkasi uchun)
+CHANNEL_NAME = "Kunlik digest"  # joriy kanal ko'rinadigan nomi (Instant View muallifi uchun)
 # Footer'dagi xizmatlar qatori (har kanal config'dan o'zgartirishi mumkin).
 FOOTER_SERVICES = "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
 
@@ -87,11 +88,12 @@ def load_channels() -> list:
 
 def _apply_channel(cfg: dict) -> None:
     """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
-    global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES
+    global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES, CHANNEL_NAME
     TELEGRAM_CHANNEL = cfg["channel"]
     TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
                                         os.environ.get("TELEGRAM_BOT_TOKEN", ""))
     CHANNEL_KEY = re.sub(r"[^A-Za-z0-9_]", "_", str(cfg["channel"]).lstrip("@")) or "default"
+    CHANNEL_NAME = cfg.get("name") or str(cfg["channel"]).lstrip("@")
     FOOTER_SERVICES = cfg.get("footer_services", "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar")
 
 UA = {"User-Agent": "Mozilla/5.0 (digest-bot)"}
@@ -964,7 +966,7 @@ def make_instant_view(item, translate=None) -> str | None:
             {"tag": "a", "attrs": {"href": link}, "children": ["🔗 Manbada to‘liq o‘qish"]}]})
         ch = str(TELEGRAM_CHANNEL).lstrip("@")
         data = {"access_token": token, "title": title[:200],
-                "author_name": "Ajoyib Kun | Bugun", "author_url": f"https://t.me/{ch}",
+                "author_name": CHANNEL_NAME, "author_url": f"https://t.me/{ch}",
                 "content": json.dumps(content, ensure_ascii=False), "return_content": "false"}
         r = requests.post("https://api.telegra.ph/createPage", data=data, timeout=25).json()
         if r.get("ok"):
