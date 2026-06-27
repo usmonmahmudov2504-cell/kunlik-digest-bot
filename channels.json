@@ -11,6 +11,7 @@
     "channel": "@FutbolUz25",
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["G", "F", "R", "S", "C"],
+    "competitions": ["WC", "CL", "PL", "PD", "SA", "BL1"],
     "news_preset": "football",
     "translate": "uz",
     "voice": "blog",

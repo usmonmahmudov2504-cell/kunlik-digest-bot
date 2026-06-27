@@ -628,6 +628,38 @@ TSDB = "https://www.thesportsdb.com/api/v1/json/3"
 WC_LEAGUE = "4429"
 WC_SEASON = "2026"
 
+# Qo'llab-quvvatlanadigan turnirlar: FD kodi -> (ko'rinadigan nom, hashtag).
+# Kanal config'idagi "competitions" ro'yxati shu kodlarni tanlaydi.
+COMPETITIONS = {
+    "WC":  ("JCH-2026", "#JCH2026"),
+    "CL":  ("Chempionlar ligasi", "#ChempionlarLigasi"),
+    "PL":  ("Angliya Premyer-ligasi", "#APL"),
+    "PD":  ("Ispaniya La Liga", "#LaLiga"),
+    "SA":  ("Italiya Seriya A", "#SeriyaA"),
+    "BL1": ("Germaniya Bundesliga", "#Bundesliga"),
+    "FL1": ("Fransiya Ligue 1", "#Ligue1"),
+}
+
+
+def _comp_name(comp: str) -> str:
+    return COMPETITIONS.get(comp, (comp, ""))[0]
+
+
+def _comp_tag(comp: str) -> str:
+    return COMPETITIONS.get(comp, (comp, f"#{comp}"))[1] or f"#{comp}"
+
+
+def _within_hours(utc: str, hours: float, future: bool) -> bool:
+    """utcDate berilgan oyna ichidami? future=True -> kelajak (o'yinlar), False -> o'tgan (natija).
+
+    Oz miqdorda (6 soat) qarama-qarshi tomonni ham qamraydi (bugun boshlangan/tugagan o'yin)."""
+    try:
+        dt = datetime.datetime.fromisoformat((utc or "").replace("Z", "+00:00"))
+    except Exception:
+        return True   # vaqtni o'qib bo'lmasa -> kesib tashlamaymiz
+    diff = (dt - datetime.datetime.now(datetime.timezone.utc)).total_seconds() / 3600.0
+    return (-6 <= diff <= hours) if future else (-hours <= diff <= 6)
+
 # Jamoa nomi -> flagcdn ISO kodi (barcha FIFA mamlakatlari, to'liq).
 WC_FLAGS = {
     # Osiyo
@@ -792,10 +824,11 @@ def _tsdb(path: str) -> dict:
         return {}
 
 
-def _mk_match(hn, an, time=None, hs=None, as_=None, rnd=None):
+def _mk_match(hn, an, time=None, hs=None, as_=None, rnd=None, hcrest=None, acrest=None):
+    # Milliy jamoa -> mamlakat bayrog'i; klub (bayroq yo'q) -> FD'dan logo (crest).
     h_uz, hb = _team_meta(hn)
     a_uz, ab = _team_meta(an)
-    d = {"home": h_uz, "away": a_uz, "hb": hb, "ab": ab, "round": rnd}
+    d = {"home": h_uz, "away": a_uz, "hb": hb or hcrest, "ab": ab or acrest, "round": rnd}
     if time is not None:
         d["time"] = time
     if hs is not None or as_ is not None:
@@ -808,15 +841,20 @@ def _fd_named(m: dict) -> bool:
     return bool((m.get("homeTeam") or {}).get("name") and (m.get("awayTeam") or {}).get("name"))
 
 
-def get_fixtures(limit: int = 10) -> list:
-    d = _fd(f"/competitions/{FD_COMP}/matches?status=SCHEDULED")
+def get_fixtures(limit: int = 10, comp: str = None, soon_hours: float = None) -> list:
+    """comp turniri uchun yaqin o'yinlar. soon_hours berilsa -> faqat shu oyna ichidagilar."""
+    comp = comp or FD_COMP
+    d = _fd(f"/competitions/{comp}/matches?status=SCHEDULED")
     if d and d.get("matches"):
-        # Avval bo'sh jamoali (TBD) o'yinlarni chiqaramiz, KEYIN limit -> haqiqiy o'yin yo'qolmaydi
         ms = [m for m in sorted(d["matches"], key=lambda m: m.get("utcDate", ""))
-              if _fd_named(m)][:limit]
+              if _fd_named(m) and (soon_hours is None
+                                   or _within_hours(m.get("utcDate", ""), soon_hours, True))][:limit]
         return [_mk_match(m["homeTeam"]["name"], m["awayTeam"]["name"],
-                          time=_match_time_uz(m.get("utcDate", "")), rnd=m.get("matchday"))
+                          time=_match_time_uz(m.get("utcDate", "")), rnd=m.get("matchday"),
+                          hcrest=m["homeTeam"].get("crest"), acrest=m["awayTeam"].get("crest"))
                 for m in ms]
+    if comp != FD_COMP:           # TSDB zaxira faqat JCH uchun
+        return []
     ev = [e for e in (_tsdb(f"eventsnextleague.php?id={WC_LEAGUE}").get("events") or [])
           if e.get("strHomeTeam") and e.get("strAwayTeam")][:limit]
     return [_mk_match(e.get("strHomeTeam", ""), e.get("strAwayTeam", ""),
@@ -824,14 +862,20 @@ def get_fixtures(limit: int = 10) -> list:
             for e in ev]
 
 
-def get_results(limit: int = 10) -> list:
-    d = _fd(f"/competitions/{FD_COMP}/matches?status=FINISHED")
+def get_results(limit: int = 10, comp: str = None, recent_hours: float = None) -> list:
+    """comp turniri uchun so'nggi natijalar. recent_hours berilsa -> faqat shu oyna ichidagilar."""
+    comp = comp or FD_COMP
+    d = _fd(f"/competitions/{comp}/matches?status=FINISHED")
     if d and d.get("matches"):
         ms = [m for m in sorted(d["matches"], key=lambda m: m.get("utcDate", ""), reverse=True)
-              if _fd_named(m)][:limit]
+              if _fd_named(m) and (recent_hours is None
+                                   or _within_hours(m.get("utcDate", ""), recent_hours, False))][:limit]
         return [_mk_match(m["homeTeam"]["name"], m["awayTeam"]["name"],
                           hs=m["score"]["fullTime"].get("home"), as_=m["score"]["fullTime"].get("away"),
-                          rnd=m.get("matchday")) for m in ms]
+                          rnd=m.get("matchday"),
+                          hcrest=m["homeTeam"].get("crest"), acrest=m["awayTeam"].get("crest")) for m in ms]
+    if comp != FD_COMP:
+        return []
     ev = [e for e in (_tsdb(f"eventspastleague.php?id={WC_LEAGUE}").get("events") or [])
           if e.get("strHomeTeam") and e.get("strAwayTeam")][:limit]
     return [_mk_match(e.get("strHomeTeam", ""), e.get("strAwayTeam", ""),
@@ -839,10 +883,11 @@ def get_results(limit: int = 10) -> list:
             for e in ev]
 
 
-def get_standings() -> dict:
-    """Guruh -> [{rank, team, badge, p, gd, pts}] (tartiblangan)."""
+def get_standings(comp: str = None) -> dict:
+    """Guruh/jadval -> [{rank, team, badge, p, gd, pts}] (tartiblangan). comp turniri."""
+    comp = comp or FD_COMP
     groups: dict = {}
-    d = _fd(f"/competitions/{FD_COMP}/standings")
+    d = _fd(f"/competitions/{comp}/standings")
     if d and d.get("standings"):
         for s in d["standings"]:
             if s.get("type") != "TOTAL":
@@ -851,7 +896,8 @@ def get_standings() -> dict:
             for r in s.get("table", []):
                 tm = r["team"]["name"]
                 groups.setdefault(g, []).append({
-                    "rank": r.get("position"), "team": _uz_team(tm), "badge": _flag_url(tm),
+                    "rank": r.get("position"), "team": _uz_team(tm),
+                    "badge": _flag_url(tm) or r["team"].get("crest"),   # milliy -> bayroq; klub -> logo
                     "p": r.get("playedGames"), "gd": r.get("goalDifference"), "pts": r.get("points")})
         if groups:
             return dict(sorted(groups.items()))
@@ -1360,9 +1406,9 @@ def market_caption(date_label, rows) -> str:
     return _finish(parts)
 
 
-def fixtures_caption(date_label, matches) -> str:
+def fixtures_caption(date_label, matches, comp="WC") -> str:
     parts = [f"⚽ <b>Bugungi o'yinlar</b> — {date_label}", "",
-             "<i>JCH-2026 · Toshkent vaqti</i>", ""]
+             f"<i>{_comp_name(comp)} · Toshkent vaqti</i>", ""]
     shown = [m for m in matches if m.get("home") and m.get("away")][:10]   # bo'sh jamoa -> tashlab ketamiz
     for m in shown:
         parts.append(f"🕐 <b>{m['time']}</b>  {m['home']} — {m['away']}")
@@ -1371,28 +1417,29 @@ def fixtures_caption(date_label, matches) -> str:
     parts.append("")
     parts.append("📋 To'liq jadval — rasmda ⬆️")
     parts.append("")
-    parts.append("#Futbol #JCH2026 #Oyinlar")
+    parts.append(f"#Futbol {_comp_tag(comp)} #Oyinlar")
     return _finish(parts)
 
 
-def results_caption(date_label, matches) -> str:
+def results_caption(date_label, matches, comp="WC") -> str:
     parts = [f"📊 <b>Natijalar</b> — {date_label}", "",
-             "<i>JCH-2026 · so'nggi o'yinlar</i>", ""]
+             f"<i>{_comp_name(comp)} · so'nggi o'yinlar</i>", ""]
     shown = [m for m in matches if m.get("home") and m.get("away")][:10]
     for m in shown:
         parts.append(f"⚽ {m['home']} <b>{m.get('hs', '')}:{m.get('as', '')}</b> {m['away']}")
     if not shown:
         parts.append("So'nggi natijalar topilmadi.")
     parts.append("")
-    parts.append("#Futbol #JCH2026 #Natijalar")
+    parts.append(f"#Futbol {_comp_tag(comp)} #Natijalar")
     return _finish(parts)
 
 
-def standings_caption(date_label, groups) -> str:
+def standings_caption(date_label, groups, comp="WC") -> str:
+    grp = f"{len(groups)} ta guruh" if len(groups) > 1 else "ochko jadvali"
     parts = [f"🏆 <b>Turnir jadvali</b> — {date_label}", "",
-             f"<i>JCH-2026 · {len(groups)} ta guruh</i>", "",
+             f"<i>{_comp_name(comp)} · {grp}</i>", "",
              "📋 To'liq jadval — rasmda ⬆️", "",
-             "#Futbol #JCH2026 #Jadval"]
+             f"#Futbol {_comp_tag(comp)} #Jadval"]
     return _finish(parts)
 
 
@@ -1997,28 +2044,43 @@ def run_channel(now, date_label, group, cfg) -> list:
             else:
                 done_today.append("M")     # kuniga bir marta
 
-    # --- F guruh: Bugungi o'yinlar (JCH-2026) ---
+    # Kanal qaysi turnirlar bo'yicha (JCH + klublar). Standart: faqat JCH.
+    comps = cfg.get("competitions", ["WC"])
+
+    # --- F guruh: yaqin o'yinlar (har turnir; faqat o'yini borlari chiqadi) ---
     if want("F"):
-        fixtures = get_fixtures(10)
-        results.append(safe_post(
-            lambda: render_fixtures_card(date_label, fixtures, "p8.png", ch),
-            fixtures_caption(date_label, fixtures), "O'yinlar"))
+        for comp in comps:
+            fx = get_fixtures(10, comp=comp, soon_hours=30)
+            if not fx:
+                continue
+            cn = _comp_name(comp)
+            results.append(safe_post(
+                lambda fx=fx, cn=cn: render_fixtures_card(date_label, fx, "p8.png", ch, comp=cn),
+                fixtures_caption(date_label, fx, comp), f"O'yinlar ({cn})"))
         done_today.append("F")
 
-    # --- R guruh: Natijalar ---
+    # --- R guruh: so'nggi natijalar (har turnir; faqat natijasi borlari chiqadi) ---
     if want("R"):
-        res = get_results(10)
-        results.append(safe_post(
-            lambda: render_results_card(date_label, res, "p9.png", ch),
-            results_caption(date_label, res), "Natijalar"))
+        for comp in comps:
+            res = get_results(10, comp=comp, recent_hours=30)
+            if not res:
+                continue
+            cn = _comp_name(comp)
+            results.append(safe_post(
+                lambda res=res, cn=cn: render_results_card(date_label, res, "p9.png", ch, comp=cn),
+                results_caption(date_label, res, comp), f"Natijalar ({cn})"))
         done_today.append("R")
 
-    # --- S guruh: Turnir jadvali ---
+    # --- S guruh: turnir jadvali (har turnir; jadvali borlari chiqadi) ---
     if want("S"):
-        st = get_standings()
-        results.append(safe_post(
-            lambda: render_standings_card(date_label, st, "p10.png", ch),
-            standings_caption(date_label, st), "Jadval"))
+        for comp in comps:
+            st = get_standings(comp=comp)
+            if not st:
+                continue
+            cn = _comp_name(comp)
+            results.append(safe_post(
+                lambda st=st, cn=cn: render_standings_card(date_label, st, "p10.png", ch, comp=cn),
+                standings_caption(date_label, st, comp), f"Jadval ({cn})"))
         done_today.append("S")
 
     # AUTO rejimida: bugun chiqarilganlarni belgilab qo'yamiz (qayta chiqmasin)

@@ -705,14 +705,14 @@ def _match_row(img, d, y, row_h, m, center):
     d.text((x_end - d.textlength(an, font=nf), cy - 15), an, font=nf, fill=TEXT)
 
 
-def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_label=""):
+def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_label="", comp="JCH-2026"):
     matches = [m for m in (matches or []) if m.get("home") and m.get("away")]   # bo'sh jamoa -> chizmaymiz
     W, pad, row_h = 900, 40, 70
     H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
     img, d = _new(W, H)
     _pitch_header(img, W, pad, "Bugungi o'yinlar", date_label)
     y = pad + 96 + 40
-    d.text((pad + 4, y), "JCH-2026 · vaqtlar Toshkent bo'yicha", font=R(22), fill=MUTED)
+    d.text((pad + 4, y), f"{comp} · vaqtlar Toshkent bo'yicha", font=R(22), fill=MUTED)
     y += 40
     if not matches:
         d.text((pad + 6, y), "Yaqin kunlarda o'yin yo'q.", font=R(26), fill=MUTED)
@@ -725,14 +725,14 @@ def render_fixtures_card(date_label, matches, out_path="fixtures.png", channel_l
     return out_path
 
 
-def render_results_card(date_label, matches, out_path="results.png", channel_label=""):
+def render_results_card(date_label, matches, out_path="results.png", channel_label="", comp="JCH-2026"):
     matches = [m for m in (matches or []) if m.get("home") and m.get("away")]   # bo'sh jamoa -> chizmaymiz
     W, pad, row_h = 900, 40, 70
     H = pad + 96 + 40 + 40 + (len(matches) or 1) * row_h + 50
     img, d = _new(W, H)
     _pitch_header(img, W, pad, "Natijalar", date_label)
     y = pad + 96 + 40
-    d.text((pad + 4, y), "JCH-2026 · so'nggi o'yinlar hisobi", font=R(22), fill=MUTED)
+    d.text((pad + 4, y), f"{comp} · so'nggi o'yinlar hisobi", font=R(22), fill=MUTED)
     y += 40
     if not matches:
         d.text((pad + 6, y), "So'nggi natijalar topilmadi.", font=R(26), fill=MUTED)
@@ -746,7 +746,7 @@ def render_results_card(date_label, matches, out_path="results.png", channel_lab
     return out_path
 
 
-def render_standings_card(date_label, groups, out_path="standings.png", channel_label=""):
+def render_standings_card(date_label, groups, out_path="standings.png", channel_label="", comp="JCH-2026"):
     W, pad, gap = 900, 40, 24
     colw = (W - 2 * pad - gap) // 2
 
@@ -757,10 +757,11 @@ def render_standings_card(date_label, groups, out_path="standings.png", channel_
         c = 0 if colh[0] <= colh[1] else 1
         colgroups[c].append((name, rows))
         colh[c] += gh(len(rows))
-    H = pad + 96 + 40 + (max(colh) if any(colh) else 60) + 50
+    H = pad + 96 + 40 + 34 + (max(colh) if any(colh) else 60) + 50
     img, d = _new(W, H)
     _pitch_header(img, W, pad, "Turnir jadvali", date_label)
-    y0 = pad + 96 + 40
+    d.text((pad + 4, pad + 96 + 40), f"{comp} · ochko jadvali", font=R(22), fill=MUTED)
+    y0 = pad + 96 + 40 + 34
     for cx, gc in [(pad, colgroups[0]), (pad + colw + gap, colgroups[1])]:
         y = y0
         for name, rows in gc:
