@@ -1702,9 +1702,10 @@ BLOG_FORMATS = [
 ]
 
 
-def post_original_blog(focus=None, themes=None) -> bool:
+def post_original_blog(focus=None, themes=None, persona=None) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
+    persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
     Aylanma mavzu + format; yaqinda ishlatilganini takrorlamaydi (blog_state.json).
     LLM (Gemini->Claude) bo'lmasa -> post yo'q (False), bot davom etadi.
     """
@@ -1715,10 +1716,11 @@ def post_original_blog(focus=None, themes=None) -> bool:
         choices = [t for t in pool if t not in recent[-6:]] or pool
         theme = random.choice(choices)
         fmt = random.choice(BLOG_FORMATS)
+        who = persona or "tajribali, samimiy bloger"
         focus_line = (f"Kanal yo'nalishi (e'tiborga ol): {focus}\n" if focus else "")
         prompt = (
-            "Sen O'zbek tilida (lotin alifbosida) yozadigan tajribali, samimiy bloggersan. "
-            "O'quvching \u2014 startap, biznes va shaxsiy rivojlanishga qiziquvchi yoshlar.\n"
+            f"Sen O'zbek tilida (lotin alifbosida) yozadigan {who}san. "
+            "O'quvching \u2014 fikrlaydigan, o'zini rivojlantirishni istagan odamlar.\n"
             f"Bugun '{theme}' mavzusida ORIGINAL post yoz \u2014 hech qaysi yangilikka bog'lanmagan, "
             "faqat o'z fikring va tajribang.\n"
             f"Format: {fmt}.\n"
@@ -1954,7 +1956,8 @@ def run_channel(now, date_label, group, cfg) -> list:
     # --- O guruh: Original blog (yangilikka bog'liq emas — biznes, motivatsiya, ...) ---
     if want("O"):
         results.append(post_original_blog(focus=cfg.get("voice_focus"),
-                                          themes=cfg.get("blog_themes")))
+                                          themes=cfg.get("blog_themes"),
+                                          persona=cfg.get("voice_persona")))
         if group == "AUTO":
             for i in o_due:
                 daily_state[f"O{i}"] = today

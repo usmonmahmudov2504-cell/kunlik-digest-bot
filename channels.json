@@ -56,5 +56,30 @@
     "voice": "blog",
     "voice_focus": "Marketing va psixologiyaga alohida urg'u ber: g'oya yoki mahsulot odamlarni nega qiziqtiradi, qaysi ehtiyoj va his-tuyg'uni qondiradi, qanday marketing/o'sish saboqlari bor. Iloji bo'lsa muvaffaqiyatli startaplar hikoyasidek ilhomlantiruvchi, o'rgatuvchi ohangda yoz va O'zbekistonlik tadbirkor uchun amaliy xulosa qo'sh.",
     "footer_services": "🚀 Startup · 🤖 AI · 📈 Investitsiyalar"
+  },
+  {
+    "name": "Makhmudov Blog",
+    "channel": "@Makhmudov_Blog",
+    "token_env": "TELEGRAM_BOT_TOKEN",
+    "groups": ["O"],
+    "slots": {"O": [10.5, 20.0]},
+    "voice": "blog",
+    "voice_persona": "kitoblarni ko'p o'qigan, ziyoli va samimiy bloger",
+    "voice_focus": "Mavzu — biznes va psixologiya kitoblari, kuchli iqtiboslar, xulosalar va esda qoladigan fikrlar. Har postda bitta aniq, amaliy va esda qoladigan g'oya ber. Iloji bo'lsa mashhur kitob, muallif yoki tadqiqotga ishora qil, lekin sodda, hayotiy va o'zbekona tushuntir. Quruq nasihatdan qoch — fikrni real hayotga bog'la.",
+    "blog_themes": [
+      "mashhur biznes kitobidan asosiy saboq va uni hayotga tatbiq etish",
+      "psixologiya: inson xulqi va qaror qabul qilish haqida tushuncha",
+      "kuchli iqtibos va uning chuqur, hayotiy sharhi",
+      "bitta zo'r kitob g'oyasining qisqa xulosasi",
+      "hayotiy donolik va o'ylantiruvchi fikr",
+      "o'z-o'zini rivojlantirish va foydali odatlar",
+      "muvaffaqiyat, intizom va mahsuldorlik psixologiyasi",
+      "tanqidiy va mustaqil fikrlash",
+      "his-tuyg'ularni boshqarish va ichki muvozanat",
+      "munosabatlar, muloqot va inson tabiati",
+      "pul, qadriyat va boylik haqida ong",
+      "vaqt, e'tibor va hayot mazmuni haqida mulohaza"
+    ],
+    "footer_services": "📚 Kitoblar · 🧠 Psixologiya · ✍️ Iqtiboslar"
   }
 ]
