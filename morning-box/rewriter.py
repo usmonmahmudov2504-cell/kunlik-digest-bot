@@ -17,11 +17,19 @@ _SENT  = re.compile(r"(?<=[.!?…])\s+")
 _WORD  = re.compile(r"[0-9A-Za-zЀ-ӿ'’]+")
 _HWORD = re.compile(r"[A-Za-zЀ-ӿ]{4,}")
 
-# O'zbek/rus stop-so'zlar (qisqa ro'yxat — ekstraktiv baholash uchun)
+# O'zbek/rus stop-so'zlar (ekstraktiv baholash uchun)
 STOP = {
     "va", "bilan", "uchun", "bu", "ham", "lekin", "yani", "yoki", "deb", "edi",
-    "boldi", "boladi", "kerak", "shu", "ular", "biz", "men", "sen", "u",
+    "boldi", "boladi", "kerak", "shu", "ular", "biz", "men", "sen", "endi",
+    "ushbu", "uning", "ularning", "hamda", "ammo", "agar", "chunki", "qilib",
     "и", "в", "на", "что", "это", "как", "по", "из", "за", "то", "не", "он",
+    "the", "and", "for", "with", "this", "that", "from", "are", "was",
+}
+# Hashtag uchun QO'SHIMCHA chiqarib tashlanadigan (umumiy sifat/fe'llar -> ot/brend qolsin)
+HASH_STOP = {
+    "yangi", "katta", "yaxshi", "muhim", "kop", "ko'p", "tez", "zor", "ajoyib",
+    "barobar", "million", "milliard", "dollar", "so'm", "yil", "kun", "bugun",
+    "kompaniya", "model", "narxi", "keng", "taqdim", "etdi", "oldi", "boldi",
 }
 
 # Juda ehtiyotkor sinonim lug'ati (rewrite_lvl>=2). Agressiv emas -> sifat saqlanadi.
@@ -65,23 +73,24 @@ def _freq(text: str) -> dict:
 
 
 def restructure(t: str, top: int = 3) -> tuple[str, str]:
-    """Ekstraktiv: sarlavha + eng muhim `top` jumla (chastota+o'rin bo'yicha)."""
+    """Ekstraktiv: sarlavha = 1-jumla; tana = qolganlardan eng muhim jumlalar.
+
+    Sarlavha tanada TAKRORLANMAYDI (1-jumla tanaga kirmaydi)."""
     sents = [s.strip() for s in _SENT.split(t) if s.strip()]
     if not sents:
         return "", ""
+    title = sents[0].rstrip(".!?…")[:90]
+    rest = sents[1:]
+    if not rest:
+        return title, ""
     freq = _freq(t)
 
-    def score(i: int, s: str) -> float:
-        sc = sum(freq.get(w, 0) for w in _WORD.findall(s.lower()))
-        sc = sc / (len(s.split()) + 1)
-        if i == 0:
-            sc += 0.5                      # birinchi jumla bonus
-        return sc
+    def score(s: str) -> float:
+        return sum(freq.get(w, 0) for w in _WORD.findall(s.lower())) / (len(s.split()) + 1)
 
-    ranked = sorted(enumerate(sents), key=lambda x: score(*x), reverse=True)
-    keep_idx = sorted(i for i, _ in ranked[:top])
-    body = " ".join(sents[i] for i in keep_idx)
-    title = sents[0][:80].rstrip(".!?…")
+    ranked = sorted(range(len(rest)), key=lambda i: score(rest[i]), reverse=True)
+    keep = sorted(ranked[:top])            # asl tartibni saqlaymiz
+    body = " ".join(rest[i] for i in keep)
     return title, body
 
 
@@ -91,10 +100,20 @@ def spin(t: str) -> str:
 
 
 def make_hashtags(t: str, base: str = "", n: int = 2) -> str:
-    """Eng tez-tez uchragan kalit so'zlardan hashtag yasaydi."""
-    words = [w for w in _HWORD.findall(t) if w.lower() not in STOP]
-    top = sorted(set(words), key=lambda w: t.lower().count(w.lower()), reverse=True)[:n]
-    auto = " ".join("#" + w.capitalize() for w in top)
+    """Hashtag: ot/brendlarni afzal ko'radi (bosh harfli so'z) + chastota.
+
+    Umumiy sifat/fe'llar (HASH_STOP) chiqarib tashlanadi -> mazmunliroq teglar."""
+    cand: dict[str, tuple] = {}              # lower -> (asl_yozuv, (bosh_harfli, chastota))
+    low = t.lower()
+    for w in _HWORD.findall(t):
+        lw = w.lower()
+        if lw in STOP or lw in HASH_STOP:
+            continue
+        cap = 1 if w[0].isupper() else 0     # bosh harfli -> ehtimol ot/brend
+        if lw not in cand:
+            cand[lw] = (w, (cap, low.count(lw)))
+    top = sorted(cand.values(), key=lambda v: v[1], reverse=True)[:n]
+    auto = " ".join("#" + w[0][0].upper() + w[0][1:] for w in top)
     return (base + " " + auto).strip()
 
 

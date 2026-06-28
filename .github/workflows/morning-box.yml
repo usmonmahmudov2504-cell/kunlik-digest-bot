@@ -1,0 +1,49 @@
+name: Morning Box tick
+
+# Tashqi trigger (cron-job.org / GitHub API) har daqiqada chaqiradi.
+# Always-on jarayon shart emas -> Free Tier.
+on:
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # box.db (holat) ni repoga qaytarish uchun
+    concurrency:
+      group: morning-box       # yurishlar ustma-ust chiqmasin
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r morning-box/requirements.txt
+
+      - name: TICK
+        working-directory: morning-box
+        run: python master_bot.py tick
+        env:
+          MB_BOT_TOKEN:   ${{ secrets.MB_BOT_TOKEN }}
+          MB_ADMIN_ID:    ${{ secrets.MB_ADMIN_ID }}
+          MB_TG_API_ID:   ${{ secrets.MB_TG_API_ID }}
+          MB_TG_API_HASH: ${{ secrets.MB_TG_API_HASH }}
+          MB_TG_SESSION:  ${{ secrets.MB_TG_SESSION }}
+
+      # Holatni (box.db: next_run + posts_log dedup) repoga saqlaymiz.
+      # Eslatma: yuqori masshtab uchun Turso (remote libSQL) tavsiya etiladi -> README.
+      - name: Holatni saqlash
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f morning-box/box.db || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: morning-box holati [skip ci]"
+            git push
+          else
+            echo "Holatda o'zgarish yo'q."
+          fi

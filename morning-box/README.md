@@ -12,6 +12,7 @@ Bitta bot orqali **ko'plab mijoz kanallarini** boshqaradigan, **bepul infratuzil
 | `publisher.py` | Bot API bilan post tashlash |
 | `scheduler.py` | TICK — vaqti kelgan jadvallarni bajaradi |
 | `master_bot.py` | Kirish nuqtasi (init / tick / serve) |
+| `admin_bot.py` | Telegram buyruqlari bilan boshqaruv (aiogram) |
 
 ## Arxitektura (Free Tier uchun)
 ```
@@ -50,5 +51,26 @@ python master_bot.py tick
 - `patterns` qayta ishlatiladi → 1000 kanal bitta qolipni bo'lishadi.
 - Telegram limiti: kerak bo'lsa partiya orasiga `asyncio.sleep` qo'shing.
 
-## Yangi mijoz qo'shish
-`clients` → `channels` (pattern_id bilan) → `sources` → `channel_sources` → `schedules` jadvallariga yozuv qo'shiladi (kelajakda admin-panel/bot buyruqlari orqali).
+## Yangi mijoz qo'shish (admin bot orqali)
+```
+python admin_bot.py           # MB_BOT_TOKEN + MB_ADMIN_ID kerak
+```
+Telegram'da:
+```
+/add_client Demo MMC
+/add_channel 1 @mijoz_kanali 1
+/add_source @manba_kanal
+/link 1 1 ai,startup
+/schedule 1 scrape */30 * * * *
+```
+
+## Deploy (GitHub Actions + cron-job.org)
+1. Repo **Secrets**: `MB_BOT_TOKEN`, `MB_ADMIN_ID`, `MB_TG_API_ID`, `MB_TG_API_HASH`, `MB_TG_SESSION`.
+2. Workflow: `.github/workflows/morning-box.yml` (`workflow_dispatch`).
+3. **cron-job.org** har daqiqada shu workflow'ni ishga tushiradi (GitHub API `workflow_dispatch`).
+4. Holat (`box.db`) har yurishdan keyin repoga saqlanadi.
+
+## Masshtab eslatmasi (muhim)
+GitHub Actions runneri **vaqtinchalik** — shuning uchun `box.db` repoga commit qilinadi (kichik hajmda mayli). **Minglab kanal / yuqori chastota** uchun:
+- **Turso (libSQL)** — bepul, SQLite-mos, **doimiy, tarmoq orqali** DB. `box.db` commit qilish shart bo'lmaydi, TICK butunlay stateless bo'ladi. `db.py` dagi `connect()` ni libSQL klientiga almashtirish kifoya.
+- Yoki doimiy diskli host (Railway/Fly volume) + `serve` rejimi (apscheduler).
