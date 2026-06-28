@@ -4,6 +4,7 @@
     "channel": "@ajoyib_kun_uz",
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["A", "B", "C", "D", "M"],
+    "news_daily_cap": 6,
     "footer_services": "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
   },
   {
@@ -13,6 +14,7 @@
     "groups": ["G", "F", "R", "S", "C"],
     "competitions": ["WC", "CL", "PL", "PD", "SA", "BL1"],
     "news_preset": "football",
+    "news_daily_cap": 5,
     "translate": "uz",
     "voice": "blog",
     "voice_persona": "tajribali sport va futbol jurnalisti",
@@ -52,6 +54,7 @@
     "news_block": ["founder summit", "early bird", "pricing ends", "save up to",
                    "disrupt 20", "buy tickets", "register now", "join 1,000", "last chance",
                    "techcrunch all stage", "techcrunch disrupt", "sessions:", "ticket"],
+    "news_daily_cap": 6,
     "translate": "uz",
     "voice": "blog",
     "voice_focus": "Marketing va psixologiyaga alohida urg'u ber: g'oya yoki mahsulot odamlarni nega qiziqtiradi, qaysi ehtiyoj va his-tuyg'uni qondiradi, qanday marketing/o'sish saboqlari bor. Iloji bo'lsa muvaffaqiyatli startaplar hikoyasidek ilhomlantiruvchi, o'rgatuvchi ohangda yoz va O'zbekistonlik tadbirkor uchun amaliy xulosa qo'sh.",
@@ -63,6 +66,7 @@
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["O"],
     "slots": {"O": [10.0, 19.0]},
+    "blog_image": true,
     "voice": "blog",
     "voice_persona": "kitoblarni ko'p o'qigan, ziyoli va samimiy bloger",
     "voice_focus": "Mavzu — biznes va psixologiya kitoblari, kuchli iqtiboslar, xulosalar va esda qoladigan fikrlar. Har postda bitta aniq, amaliy va esda qoladigan g'oya ber. Iloji bo'lsa mashhur kitob, muallif yoki tadqiqotga ishora qil, lekin sodda, hayotiy va o'zbekona tushuntir. Quruq nasihatdan qoch — fikrni real hayotga bog'la.",

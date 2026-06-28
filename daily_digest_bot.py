@@ -38,7 +38,7 @@ from render_card import (
     render_day_card, render_news_card, render_weather_card,
     render_currency_overview_card, render_currency_card, render_advice_card,
     render_market_card, render_fixtures_card, render_results_card, render_standings_card,
-    render_goal_card,
+    render_goal_card, render_blog_card,
 )
 
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
@@ -1743,10 +1743,11 @@ BLOG_FORMATS = [
 ]
 
 
-def post_original_blog(focus=None, themes=None, persona=None) -> bool:
+def post_original_blog(focus=None, themes=None, persona=None, as_image=False) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
+    as_image=True -> matn chiroyli kartaga (PNG) chizilib, rasm sifatida yuboriladi.
     Aylanma mavzu + format; yaqinda ishlatilganini takrorlamaydi (blog_state.json).
     LLM (Gemini->Claude) bo'lmasa -> post yo'q (False), bot davom etadi.
     """
@@ -1784,12 +1785,30 @@ def post_original_blog(focus=None, themes=None, persona=None) -> bool:
             print("Original blog: LLM javob bermadi (Gemini/Claude).")
             return False
         text = text.strip().strip('"').replace("**", "").replace("__", "").replace("*", "").strip()
-        body = html.escape(text[:1600], quote=False)
         ch = str(TELEGRAM_CHANNEL).strip()
-        if ch.startswith("@"):
-            label = html.escape(CHANNEL_NAME or ch, quote=False)
-            body += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
-        post_message(body, link_preview={"is_disabled": True})
+        label = CHANNEL_NAME or ch
+        posted = False
+        if as_image:
+            try:
+                # Pillow rangli emoji'ni chiza olmaydi -> karta uchun emoji/belgilarni olib tashlaymiz
+                card_text = re.sub(
+                    r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
+                    r"\U0000FE0F\U00002190-\U000021FF\U00002B00-\U00002BFF]", "", text)
+                card_text = re.sub(r"[ \t]+", " ", card_text)
+                card_text = re.sub(r"\s+([.,!?;:])", r"\1", card_text).strip()   # emoji o'rnidagi bo'shliq
+                img = render_blog_card(card_text, label, "p_blog.png")
+                cap = (f"\U0001F4D6 <a href=\"https://t.me/{ch[1:]}\">"
+                       f"{html.escape(label, quote=False)}</a>") if ch.startswith("@") else ""
+                post_photo(img, cap)
+                posted = True
+            except Exception as e:
+                print(f"Blog karta xato (matnga qaytamiz): {e}")
+        if not posted:
+            body = html.escape(text[:1600], quote=False)
+            if ch.startswith("@"):
+                body += (f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">"
+                         f"{html.escape(label, quote=False)}</a>")
+            post_message(body, link_preview={"is_disabled": True})
         recent.append(theme)
         st["recent"] = recent[-10:]
         _save_json("blog_state.json", st)
@@ -1997,16 +2016,29 @@ def run_channel(now, date_label, group, cfg) -> list:
         posted = load_posted()
         seen = set(posted)
         fresh = [it for it in news if _news_key(it) and _news_key(it) not in seen]
-        fresh = fresh[:MAX_ALERTS]
+        # Kunlik xabar chegarasi (news_daily_cap) -> kanal to'lib ketmasin + AI tejaladi.
+        cap = cfg.get("news_daily_cap")
+        nd = _load_json("news_daily.json", {})
+        if nd.get("date") != today:
+            nd = {"date": today, "count": 0}
+        per_run = MAX_ALERTS
+        if cap:
+            per_run = min(MAX_ALERTS, max(0, int(cap) - int(nd.get("count", 0))))
+        fresh = fresh[:per_run]
         if not fresh:
-            print("Yangi xabar yo'q (takror oldini olindi).")
+            print("Yangi xabar yo'q yoki kunlik limit to'ldi.")
+        n_ok = 0
         for it in fresh:
             ok = post_breaking(it, translate=translate, voice=voice, focus=focus, persona=persona)
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
+                n_ok += 1
         if fresh:
             save_posted(posted)
+        if cap and n_ok:
+            nd["count"] = int(nd.get("count", 0)) + n_ok
+            _save_json("news_daily.json", nd)
 
     # --- P guruh: Startup uchun statistika (USD, Bitcoin, Yevro + yengil prognoz) ---
     if want("P"):
@@ -2019,7 +2051,8 @@ def run_channel(now, date_label, group, cfg) -> list:
     if want("O"):
         okO = post_original_blog(focus=cfg.get("voice_focus"),
                                  themes=cfg.get("blog_themes"),
-                                 persona=cfg.get("voice_persona"))
+                                 persona=cfg.get("voice_persona"),
+                                 as_image=cfg.get("blog_image", False))
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:

@@ -73,26 +73,6 @@ def _ellipsize(d, text, font, max_w):
     return text + "…"
 
 
-def _wrap(d, text, font, max_w):
-    """Matnni max_w pikselga sig'adigan qatorlarga bo'ladi (so'z bo'yicha, abzaslarni saqlab)."""
-    lines = []
-    for para in text.split("\n"):
-        if not para.strip():
-            lines.append("")
-            continue
-        cur = ""
-        for w in para.split():
-            trial = (cur + " " + w).strip()
-            if not cur or d.textlength(trial, font=font) <= max_w:
-                cur = trial
-            else:
-                lines.append(cur)
-                cur = w
-        if cur:
-            lines.append(cur)
-    return lines
-
-
 def _font(name, size):
     for dpath in FONT_DIRS:
         p = os.path.join(dpath, name)
@@ -886,8 +866,12 @@ def render_blog_card(text, channel_label="", out_path="blog.png", accent=PURPLE)
     fsize = 44 if n < 180 else 38 if n < 320 else 33 if n < 520 else 29
     font = R(fsize)
     line_h = round(fsize * 1.46)
-    tmp = ImageDraw.Draw(Image.new("RGB", (4, 4)))
-    lines = _wrap(tmp, text, font, max_w)
+    lines = []                            # abzaslarni saqlab, har birini alohida o'raymiz
+    for para in text.split("\n"):
+        if para.strip():
+            lines += _wrap(para, font, max_w)
+        else:
+            lines.append("")
     quote_top = pad + 4
     text_top = quote_top + 96
     text_h = len(lines) * line_h
