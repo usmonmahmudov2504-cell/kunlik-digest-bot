@@ -1,4 +1,4 @@
-"""Morning Box — Master Bot kirish nuqtasi.
+"""AvtoPost — Master Bot kirish nuqtasi.
 
 Rejimlar (CLI):
   python master_bot.py init   -> DB yaratish + demo ma'lumot

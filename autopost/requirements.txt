@@ -1,4 +1,4 @@
-# Morning Box — yengil bog'liqliklar (pandas/numpy/sklearn YO'Q)
+# AvtoPost — yengil bog'liqliklar (pandas/numpy/sklearn YO'Q)
 aiohttp          # publisher (Bot API, async)
 telethon         # scraper (manba kanallarni o'qish, MTProto)
 feedparser       # rss manbalar (ixtiyoriy)

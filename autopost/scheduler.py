@@ -1,4 +1,4 @@
-"""Morning Box — TICK scheduler.
+"""AvtoPost — TICK scheduler.
 
 Tashqi cron (cron-job.org / GitHub Actions) har daqiqada `tick()` ni chaqiradi.
 Always-on jarayon SHART EMAS -> Free Tier uchun ideal.
@@ -47,7 +47,7 @@ async def handle_job(database, job) -> None:
     """Bitta jadval ishini bajaradi: scrape -> rewrite -> publish.
 
     Hisob ma'lumotlari (Telethon/Bot token) bo'lmasa — bosqichlar jim o'tadi."""
-    from rewriter import to_morning_box
+    from rewriter import brandify
     pattern = db.get_pattern(database, job["pattern_id"])
     pat = dict(pattern) if pattern else {}
     channel = job["tg_chat"]
@@ -64,7 +64,7 @@ async def handle_job(database, job) -> None:
         c_hash = db.content_hash(it["text"])
         if db.is_duplicate(database, job["channel_id"], c_hash):
             continue
-        text = to_morning_box(it["text"], pat, channel)
+        text = brandify(it["text"], pat, channel)
         ok = await publisher.send(channel, text)
         if ok:
             db.mark_posted(database, job["channel_id"], it.get("source_id"),

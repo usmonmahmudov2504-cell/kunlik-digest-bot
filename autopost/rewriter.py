@@ -1,4 +1,4 @@
-"""Morning Box — algoritmik (AI'siz, BEPUL) tahrirlash quvuri.
+"""AvtoPost — algoritmik (AI'siz, BEPUL) tahrirlash quvuri.
 
 Quvur: clean -> normalize -> restructure -> (spin) -> brand.
 Sof Python + re. Tarmoq yo'q -> tez, yengil, testlash oson.
@@ -117,8 +117,8 @@ def make_hashtags(t: str, base: str = "", n: int = 2) -> str:
     return (base + " " + auto).strip()
 
 
-def to_morning_box(raw: str, pattern: dict | None = None, channel: str = "") -> str:
-    """To'liq quvur: xom post -> Morning Box brendidagi tayyor matn."""
+def brandify(raw: str, pattern: dict | None = None, channel: str = "") -> str:
+    """To'liq quvur: xom post -> AvtoPost brendidagi tayyor matn."""
     pattern = pattern or {}
     lvl = int(pattern.get("rewrite_lvl", 1) or 0)
 
@@ -130,7 +130,7 @@ def to_morning_box(raw: str, pattern: dict | None = None, channel: str = "") -> 
         title, body = "", t
 
     tags = make_hashtags(t, pattern.get("hashtags", ""))
-    header = pattern.get("header", "📦 <b>Morning Box</b>")
+    header = pattern.get("header", "🚀 <b>AvtoPost</b>")
     footer = pattern.get("footer", "")
     if footer and channel:
         footer = footer.replace("{channel}", channel)
@@ -152,6 +152,6 @@ if __name__ == "__main__":
             "Yangi AI startap katta investitsiya oldi. Kompaniya 10 million dollar "
             "jamg'ardi. Bu yil ular bozorni kengaytirmoqchi. Obuna bo'ling @some_channel "
             "https://t.me/some_channel")
-    pat = {"header": "📦 <b>Morning Box</b>", "footer": "👉 {channel} · obuna bo'ling 🔔",
-           "hashtags": "#MorningBox", "rewrite_lvl": 1}
-    print(to_morning_box(demo, pat, "@morningbox_demo"))
+    pat = {"header": "🚀 <b>AvtoPost</b>", "footer": "👉 {channel} · obuna bo'ling 🔔",
+           "hashtags": "#AvtoPost", "rewrite_lvl": 1}
+    print(brandify(demo, pat, "@avtopost_demo"))

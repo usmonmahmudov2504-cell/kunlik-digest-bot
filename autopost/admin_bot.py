@@ -1,4 +1,4 @@
-"""Morning Box — Admin bot (aiogram 3).
+"""AvtoPost — Admin bot (aiogram 3).
 
 Mijoz/kanal/manba/jadvalni Telegram buyruqlari orqali boshqarish (DB'ga qo'lda
 SQL yozish shart emas). Faqat MB_ADMIN_ID egasiga ruxsat.
@@ -15,7 +15,7 @@ TOKEN = os.environ.get("MB_BOT_TOKEN", "")
 ADMIN = int(os.environ.get("MB_ADMIN_ID", "0") or 0)
 
 HELP = (
-    "📦 <b>Morning Box — Admin</b>\n\n"
+    "🚀 <b>AvtoPost — Admin</b>\n\n"
     "/add_client <ism>\n"
     "/add_channel <client_id> <@kanal> [pattern_id]\n"
     "/add_source <@manba|rss_url> [rss]\n"

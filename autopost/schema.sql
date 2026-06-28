@@ -1,4 +1,4 @@
--- Morning Box — Master Bot ma'lumotlar bazasi (SQLite, yengil)
+-- AvtoPost — Master Bot ma'lumotlar bazasi (SQLite, yengil)
 -- 6 jadval: clients, patterns, channels, sources, channel_sources, schedules, posts_log
 
 PRAGMA journal_mode = WAL;     -- ko'p o'qish/yozishda tezroq, yengil

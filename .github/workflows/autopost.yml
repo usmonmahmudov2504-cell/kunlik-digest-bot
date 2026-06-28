@@ -1,4 +1,4 @@
-name: Morning Box tick
+name: AvtoPost tick
 
 # Tashqi trigger (cron-job.org / GitHub API) har daqiqada chaqiradi.
 # Always-on jarayon shart emas -> Free Tier.
@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write          # box.db (holat) ni repoga qaytarish uchun
     concurrency:
-      group: morning-box       # yurishlar ustma-ust chiqmasin
+      group: autopost          # yurishlar ustma-ust chiqmasin
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +21,10 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - run: pip install -r morning-box/requirements.txt
+      - run: pip install -r autopost/requirements.txt
 
       - name: TICK
-        working-directory: morning-box
+        working-directory: autopost
         run: python master_bot.py tick
         env:
           MB_BOT_TOKEN:   ${{ secrets.MB_BOT_TOKEN }}
@@ -40,9 +40,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f morning-box/box.db || true
+          git add -f autopost/box.db || true
           if ! git diff --cached --quiet; then
-            git commit -m "chore: morning-box holati [skip ci]"
+            git commit -m "chore: autopost holati [skip ci]"
             git push
           else
             echo "Holatda o'zgarish yo'q."

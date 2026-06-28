@@ -1,4 +1,4 @@
-"""Morning Box — SQLite yordamchisi (yengil, stdlib sqlite3).
+"""AvtoPost — SQLite yordamchisi (yengil, stdlib sqlite3).
 
 TICK qisqa muddatli ishlagani uchun sync sqlite3 yetarli (ORM shart emas).
 """
@@ -92,11 +92,11 @@ def seed_demo() -> None:
         db.close()
         return
     db.execute("""INSERT INTO patterns(id,name,header,footer,hashtags,rewrite_lvl)
-        VALUES (1,'MorningBox-default','📦 <b>Morning Box</b>',
-                '👉 {channel} · obuna bo''ling 🔔','#MorningBox',1)""")
+        VALUES (1,'AvtoPost-default','🚀 <b>AvtoPost</b>',
+                '👉 {channel} · obuna bo''ling 🔔','#AvtoPost',1)""")
     db.execute("INSERT INTO clients(id,name) VALUES (1,'Demo mijoz')")
     db.execute("""INSERT INTO channels(id,client_id,pattern_id,tg_chat,title)
-                  VALUES (1,1,1,'@morningbox_demo','Morning Box Demo')""")
+                  VALUES (1,1,1,'@avtopost_demo','AvtoPost Demo')""")
     db.execute("INSERT INTO sources(id,kind,ref) VALUES (1,'tg','@some_news_source')")
     db.execute("""INSERT INTO channel_sources(channel_id,source_id,keywords)
                   VALUES (1,1,'ai,startup')""")

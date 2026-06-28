@@ -1,4 +1,4 @@
-"""Morning Box — Scraper (manba kanallardan post olish).
+"""AvtoPost — Scraper (manba kanallardan post olish).
 
 - tg manbalar: Telethon (MTProto user session) — ochiq kanalni o'qiy oladi.
 - rss manbalar: feedparser (ixtiyoriy).

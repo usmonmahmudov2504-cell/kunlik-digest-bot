@@ -1,4 +1,4 @@
-"""Morning Box — Publisher (Telegram Bot API orqali post tashlash).
+"""AvtoPost — Publisher (Telegram Bot API orqali post tashlash).
 
 Bitta Master Bot barcha mijoz kanallariga yozadi (har kanalda admin bo'lishi shart).
 Yengil: aiohttp bilan async sendMessage. Token MB_BOT_TOKEN env'da.

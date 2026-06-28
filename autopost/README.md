@@ -1,6 +1,6 @@
-# 📦 Morning Box — Master Bot (multi-tenant)
+# 🚀 AvtoPost — Master Bot (multi-tenant)
 
-Bitta bot orqali **ko'plab mijoz kanallarini** boshqaradigan, **bepul infratuzilmada** ishlaydigan yengil tizim. Manba kanallardan post oladi → **AI'siz algoritmik** tahrirlaydi (Morning Box brendi) → belgilangan kanallarga tarqatadi.
+Bitta bot orqali **ko'plab mijoz kanallarini** boshqaradigan, **bepul infratuzilmada** ishlaydigan yengil tizim. Manba kanallardan post oladi → **AI'siz algoritmik** tahrirlaydi (AvtoPost brendi) → belgilangan kanallarga tarqatadi.
 
 ## Tuzilma
 | Fayl | Vazifa |
@@ -20,7 +20,7 @@ Tashqi cron (har 1 daq) ─▶ master_bot.py tick
         │
         ├─ DB'dan "due" jadvallar (next_run<=now)
         ├─ scraper: manbadan post
-        ├─ rewriter: Morning Box brendi (AI'siz)
+        ├─ rewriter: AvtoPost brendi (AI'siz)
         ├─ publisher: kanalga yuborish
         └─ posts_log: dedup
 ```
@@ -66,7 +66,7 @@ Telegram'da:
 
 ## Deploy (GitHub Actions + cron-job.org)
 1. Repo **Secrets**: `MB_BOT_TOKEN`, `MB_ADMIN_ID`, `MB_TG_API_ID`, `MB_TG_API_HASH`, `MB_TG_SESSION`.
-2. Workflow: `.github/workflows/morning-box.yml` (`workflow_dispatch`).
+2. Workflow: `.github/workflows/autopost.yml` (`workflow_dispatch`).
 3. **cron-job.org** har daqiqada shu workflow'ni ishga tushiradi (GitHub API `workflow_dispatch`).
 4. Holat (`box.db`) har yurishdan keyin repoga saqlanadi.
 
