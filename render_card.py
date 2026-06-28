@@ -73,6 +73,26 @@ def _ellipsize(d, text, font, max_w):
     return text + "…"
 
 
+def _wrap(d, text, font, max_w):
+    """Matnni max_w pikselga sig'adigan qatorlarga bo'ladi (so'z bo'yicha, abzaslarni saqlab)."""
+    lines = []
+    for para in text.split("\n"):
+        if not para.strip():
+            lines.append("")
+            continue
+        cur = ""
+        for w in para.split():
+            trial = (cur + " " + w).strip()
+            if not cur or d.textlength(trial, font=font) <= max_w:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+    return lines
+
+
 def _font(name, size):
     for dpath in FONT_DIRS:
         p = os.path.join(dpath, name)
@@ -846,6 +866,46 @@ def render_goal_card(m, out_path="goal.png", channel_label=""):
         d.text((W // 2 - d.textlength(mt, font=mf) / 2, 500), mt, font=mf, fill=(195, 214, 255))
     if channel_label:
         d.text((pad, H - 48), channel_label, font=R(22), fill=(205, 218, 255))
+    img.save(out_path)
+    return out_path
+
+
+# ============================================================ 10) BLOG / IQTIBOS kartasi
+def render_blog_card(text, channel_label="", out_path="blog.png", accent=PURPLE):
+    """Blog/iqtibos matnidan chiroyli, o'qiladigan karta (PNG).
+
+    Matn uzunligiga qarab shrift va balandlik avtomatik moslashadi. Faqat Pillow ->
+    o'zbekcha matn 100% aniq (AI rasm matnni buzadi), bepul va brendga mos.
+    """
+    text = (text or "").strip()
+    W, pad = 1000, 60
+    left = pad + 48                       # matn chap cheki (accent chiziq uchun joy)
+    right = W - pad - 36
+    max_w = right - left
+    n = len(text)                         # uzunlik -> shrift (uzun bo'lsa kichikroq)
+    fsize = 44 if n < 180 else 38 if n < 320 else 33 if n < 520 else 29
+    font = R(fsize)
+    line_h = round(fsize * 1.46)
+    tmp = ImageDraw.Draw(Image.new("RGB", (4, 4)))
+    lines = _wrap(tmp, text, font, max_w)
+    quote_top = pad + 4
+    text_top = quote_top + 96
+    text_h = len(lines) * line_h
+    H = text_top + text_h + 78 + pad
+    img, d = _new(W, H)
+    _panel(img, (pad - 16, pad - 16, W - pad + 16, H - pad + 16), 30, CARD)
+    d.text((left - 8, quote_top - 26), "“", font=B(130), fill=accent)   # dekor tirnoq
+    y = text_top
+    for ln in lines:
+        if ln:
+            d.text((left, y), ln, font=font, fill=TEXT)
+        y += line_h
+    d.rounded_rectangle((pad + 10, text_top + 2, pad + 16, y - (line_h - fsize)),
+                        radius=3, fill=accent)                                # chap accent chiziq
+    fy = y + 18
+    d.line((left, fy, right, fy), fill=DIVIDER, width=2)
+    if channel_label:
+        d.text((left, fy + 18), channel_label, font=B(28), fill=MUTED)
     img.save(out_path)
     return out_path
 
