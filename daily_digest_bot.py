@@ -807,14 +807,20 @@ def _match_time_uz(ts: str) -> str:
         return "--:--"
 
 
-def _fd(path: str):
-    """football-data.org so'rovi (kalit bo'lsa). Xato/kalitsiz -> None."""
+def _fd(path: str, _retry: int = 1):
+    """football-data.org so'rovi (kalit bo'lsa). 429 (bepul tarif limiti) -> kutib qayta urinadi."""
     if not FOOTBALL_API_KEY:
         return None
     try:
         r = requests.get(f"{FD_BASE}{path}", headers={"X-Auth-Token": FOOTBALL_API_KEY}, timeout=20)
         if r.status_code == 200:
             return r.json()
+        if r.status_code == 429 and _retry > 0:     # daqiqasiga 10 ta limit -> biroz kutamiz
+            import time
+            wait = min(int(r.headers.get("Retry-After", 0) or 8), 30)
+            print(f"football-data.org 429 -> {wait}s kutib qayta urinamiz...")
+            time.sleep(wait)
+            return _fd(path, _retry - 1)
         print(f"football-data.org {r.status_code}: {r.text[:120]}")
     except Exception as e:
         print("football-data.org xato:", e)
@@ -1949,23 +1955,27 @@ def run_channel(now, date_label, group, cfg) -> list:
     if want("A"):
         day_info = get_day_info(now)
         tip = get_daily_tip(now)
-        results.append(safe_post(
+        a1 = safe_post(
             lambda: render_day_card(date_label, day_info["weekday"], day_info["season"],
                                     day_info["day_of_year"], day_info["days_left"],
                                     day_info["week_no"], day_info["holidays"], "p1.png", ch),
-            day_caption(date_label, day_info), "Bugun"))
-        results.append(safe_post(
+            day_caption(date_label, day_info), "Bugun")
+        a2 = safe_post(
             lambda: render_advice_card(date_label, tip["kind"], tip["text"], "p3.png", ch),
-            advice_caption(date_label, tip), "Kun maslahati"))
-        done_today.append("A")
+            advice_caption(date_label, tip), "Kun maslahati")
+        results += [a1, a2]
+        if a1 or a2:                  # xato bo'lsa kun bo'yi qayta urinadi (skip qilmaydi)
+            done_today.append("A")
 
     # --- B guruh: Ob-havo ---
     if want("B"):
         weather = get_all_weather()
-        results.append(safe_post(
+        okB = safe_post(
             lambda: render_weather_card(date_label, weather, "p4.png", ch),
-            weather_caption(date_label, weather), "Ob-havo"))
-        done_today.append("B")
+            weather_caption(date_label, weather), "Ob-havo")
+        results.append(okB)
+        if okB:
+            done_today.append("B")
 
     # --- C guruh: Tezkor xabarlar (real-vaqt, faqat yangilarini) ---
     # Manba kanal config'idan: news_preset (business/football) yoki news_feeds/keywords.
@@ -1998,8 +2008,10 @@ def run_channel(now, date_label, group, cfg) -> list:
 
     # --- P guruh: Startup uchun statistika (USD, Bitcoin, Yevro + yengil prognoz) ---
     if want("P"):
-        results.append(post_startup_stats(date_label, focus=cfg.get("voice_focus")))
-        done_today.append("P")
+        okP = post_startup_stats(date_label, focus=cfg.get("voice_focus"))
+        results.append(okP)
+        if okP:                       # xato -> belgilamaymiz, keyin qayta uradi
+            done_today.append("P")
 
     # --- O guruh: Original blog (yangilikka bog'liq emas — biznes, motivatsiya, ...) ---
     if want("O"):
@@ -2078,6 +2090,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         m = get_market_data()
         prev_m = load_prev_market()
         rows = market_rows(m, prev_m.get("gold"))
+        ok_m = False
         if rows:
             ok_m = safe_post(
                 lambda: render_market_card(date_label, rows, "p7.png", ch),
@@ -2087,68 +2100,86 @@ def run_channel(now, date_label, group, cfg) -> list:
                 save_prev_market({"gold": m["gold"]})
         else:
             print("Bozor ma'lumoti topilmadi.")
-        if group == "AUTO":
-            if m_due:                      # slotli kanal -> har slotni alohida belgilaymiz
-                for i in m_due:
-                    daily_state[f"M{i}"] = today
-                state_changed = True
-            else:
-                done_today.append("M")     # kuniga bir marta
+        if group == "AUTO":               # faqat muvaffaqiyatda belgilanadi -> xato -> retry
+            if m_due:
+                if ok_m:                  # slotli kanal -> har slotni alohida belgilaymiz
+                    for i in m_due:
+                        daily_state[f"M{i}"] = today
+                    state_changed = True
+            elif ok_m:
+                done_today.append("M")    # kuniga bir marta
 
     # Kanal qaysi turnirlar bo'yicha (JCH + klublar). Standart: faqat JCH.
     comps = cfg.get("competitions", ["WC"])
 
     # --- F guruh: yaqin o'yinlar (har turnir; faqat o'yini borlari chiqadi) ---
     if want("F"):
+        had, ok_any = False, False
         for comp in comps:
             fx = get_fixtures(10, comp=comp, soon_hours=30)
             if not fx:
                 continue
+            had = True
             cn = _comp_name(comp)
-            results.append(safe_post(
+            okF = safe_post(
                 lambda fx=fx, cn=cn: render_fixtures_card(date_label, fx, "p8.png", ch, comp=cn),
-                fixtures_caption(date_label, fx, comp), f"O'yinlar ({cn})"))
-        done_today.append("F")
+                fixtures_caption(date_label, fx, comp), f"O'yinlar ({cn})")
+            results.append(okF)
+            ok_any = ok_any or okF
+        if ok_any or not had:        # post chiqdi yoki o'yin yo'q -> bajarildi; xato -> retry
+            done_today.append("F")
 
     # --- R guruh: so'nggi natijalar (har turnir; faqat natijasi borlari chiqadi) ---
     if want("R"):
+        had, ok_any = False, False
         for comp in comps:
             res = get_results(10, comp=comp, recent_hours=30)
             if not res:
                 continue
+            had = True
             cn = _comp_name(comp)
-            results.append(safe_post(
+            okR = safe_post(
                 lambda res=res, cn=cn: render_results_card(date_label, res, "p9.png", ch, comp=cn),
-                results_caption(date_label, res, comp), f"Natijalar ({cn})"))
-        done_today.append("R")
+                results_caption(date_label, res, comp), f"Natijalar ({cn})")
+            results.append(okR)
+            ok_any = ok_any or okR
+        if ok_any or not had:
+            done_today.append("R")
 
     # --- S guruh: turnir jadvali (har turnir; jadvali borlari chiqadi) ---
     if want("S"):
+        had, ok_any = False, False
         for comp in comps:
             st = get_standings(comp=comp)
             if not st:
                 continue
+            had = True
             cn = _comp_name(comp)
-            results.append(safe_post(
+            okS = safe_post(
                 lambda st=st, cn=cn: render_standings_card(date_label, st, "p10.png", ch, comp=cn),
-                standings_caption(date_label, st, comp), f"Jadval ({cn})"))
-        done_today.append("S")
+                standings_caption(date_label, st, comp), f"Jadval ({cn})")
+            results.append(okS)
+            ok_any = ok_any or okS
+        if ok_any or not had:
+            done_today.append("S")
 
     # --- V guruh: viloyatlar bo'yicha dollar kursi (chiroyli tree-matn) ---
     if want("V"):
         banks = get_bank_rates()
         cap = regional_dollar_caption(date_label, banks)
+        okV = False
         if cap:
             try:
                 post_message(cap, link_preview={"is_disabled": True})
                 print("Viloyatlar dollar ✓")
-                results.append(True)
+                okV = True
             except Exception as e:
                 print("Viloyatlar dollar XATO:", e)
-                results.append(False)
+            results.append(okV)
         else:
             print("Viloyatlar dollar: bank kursi topilmadi.")
-        done_today.append("V")
+        if okV:                       # xato/bank yo'q -> belgilamaymiz, keyin qayta uradi
+            done_today.append("V")
 
     # AUTO rejimida: bugun chiqarilganlarni belgilab qo'yamiz (qayta chiqmasin)
     if group == "AUTO" and (done_today or state_changed):
