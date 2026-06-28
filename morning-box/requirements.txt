@@ -1,0 +1,6 @@
+# Morning Box — yengil bog'liqliklar (pandas/numpy/sklearn YO'Q)
+aiohttp          # publisher (Bot API, async)
+telethon         # scraper (manba kanallarni o'qish, MTProto)
+feedparser       # rss manbalar (ixtiyoriy)
+apscheduler      # faqat `serve` (always-on) rejimi uchun (ixtiyoriy)
+# rewriter + db + scheduler -> sof Python (stdlib), qo'shimcha kutubxona shart emas

@@ -1,0 +1,7 @@
+# SQLite (yaratiladigan)
+box.db
+box.db-wal
+box.db-shm
+*.session
+__pycache__/
+*.pyc
