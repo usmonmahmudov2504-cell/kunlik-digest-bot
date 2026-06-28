@@ -1787,7 +1787,8 @@ def post_original_blog(focus=None, themes=None, persona=None) -> bool:
         body = html.escape(text[:1600], quote=False)
         ch = str(TELEGRAM_CHANNEL).strip()
         if ch.startswith("@"):
-            body += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{ch}</a>"
+            label = html.escape(CHANNEL_NAME or ch, quote=False)
+            body += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
         post_message(body, link_preview={"is_disabled": True})
         recent.append(theme)
         st["recent"] = recent[-10:]
@@ -1987,7 +1988,8 @@ def run_channel(now, date_label, group, cfg) -> list:
         voice = cfg.get("voice")              # "blog" -> ma'lumotli post ovozida qayta yozish
         focus = cfg.get("voice_focus")        # blog uchun qo'shimcha yo'nalish/urg'u (marketing, psixologiya...)
         persona = cfg.get("voice_persona")    # kim yozayotgani (mas. "sport jurnalisti")
-        news = get_news(feeds, kw, limit=10)
+        # Ko'proq nomzod olamiz -> blok/takror filtridan keyin ham yangi xabar qolsin
+        news = get_news(feeds, kw, limit=20)
         block = [w.lower() for w in cfg.get("news_block", [])]   # reklama/begona sarlavhalarni kesish
         if block:
             news = [it for it in news
@@ -2015,10 +2017,11 @@ def run_channel(now, date_label, group, cfg) -> list:
 
     # --- O guruh: Original blog (yangilikka bog'liq emas — biznes, motivatsiya, ...) ---
     if want("O"):
-        results.append(post_original_blog(focus=cfg.get("voice_focus"),
-                                          themes=cfg.get("blog_themes"),
-                                          persona=cfg.get("voice_persona")))
-        if group == "AUTO":
+        okO = post_original_blog(focus=cfg.get("voice_focus"),
+                                 themes=cfg.get("blog_themes"),
+                                 persona=cfg.get("voice_persona"))
+        results.append(okO)
+        if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:
                 daily_state[f"O{i}"] = today
             state_changed = True
