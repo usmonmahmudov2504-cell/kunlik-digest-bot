@@ -61,8 +61,9 @@ def _fetch_rss(ref: str, keywords: str, source_id: int) -> list[dict]:
         import feedparser
     except Exception:
         return []
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"   # UA'siz ba'zi RSS bloklaydi
     out = []
-    for e in feedparser.parse(ref).entries[:PER_SOURCE]:
+    for e in feedparser.parse(ref, agent=ua).entries[:PER_SOURCE]:
         txt = (e.get("title", "") + "\n" + e.get("summary", "")).strip()
         if len(txt) >= 40 and _passes(txt, keywords):
             out.append({"text": txt, "msg_id": None, "source_id": source_id})

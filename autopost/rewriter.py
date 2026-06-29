@@ -5,6 +5,7 @@ Sof Python + re. Tarmoq yo'q -> tez, yengil, testlash oson.
 """
 from __future__ import annotations
 import re
+import html as _html
 
 # Regex'lar bir marta kompilyatsiya (tezlik/xotira)
 _FWD   = re.compile(r"(?im)^.*(переслано|forwarded from|via)\b.*$")
@@ -43,6 +44,8 @@ SYN = {
 def clean(t: str) -> str:
     """Manba izlarini olib tashlaydi: forward, @user, havola, reklama CTA."""
     t = t or ""
+    t = _html.unescape(t)                # &laquo; &nbsp; &amp; ... -> haqiqiy belgilar
+    t = re.sub(r"<[^>]+>", " ", t)        # qolgan HTML teglar (summary'da bo'lishi mumkin)
     t = _FWD.sub("", t)
     t = _USER.sub("", t)
     t = _URL.sub("", t)
@@ -52,7 +55,7 @@ def clean(t: str) -> str:
 
 def normalize(t: str) -> str:
     """Bo'shliq, tire, tirnoq, bosh harflarni tartibga soladi."""
-    t = t.replace("«", "\"").replace("»", "\"").replace("—", "—")
+    t = t.replace("«", "\"").replace("»", "\"").replace("\xa0", " ")
     t = _WS.sub(" ", t)
     t = _NL.sub("\n\n", t)
     # har jumlani bosh harf bilan boshlash
@@ -76,10 +79,12 @@ def restructure(t: str, top: int = 3) -> tuple[str, str]:
     """Ekstraktiv: sarlavha = 1-jumla; tana = qolganlardan eng muhim jumlalar.
 
     Sarlavha tanada TAKRORLANMAYDI (1-jumla tanaga kirmaydi)."""
-    sents = [s.strip() for s in _SENT.split(t) if s.strip()]
+    sents = []                             # yangi qator + jumla belgisi -> chegara
+    for line in t.split("\n"):
+        sents += [s.strip() for s in _SENT.split(line) if s.strip()]
     if not sents:
         return "", ""
-    title = sents[0].rstrip(".!?…")[:90]
+    title = sents[0].rstrip(".!?…")[:120]
     rest = sents[1:]
     if not rest:
         return title, ""

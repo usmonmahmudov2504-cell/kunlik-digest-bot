@@ -97,9 +97,10 @@ def seed_demo() -> None:
     db.execute("INSERT INTO clients(id,name) VALUES (1,'Demo mijoz')")
     db.execute("""INSERT INTO channels(id,client_id,pattern_id,tg_chat,title)
                   VALUES (1,1,1,'@avtopost_demo','AvtoPost Demo')""")
-    db.execute("INSERT INTO sources(id,kind,ref) VALUES (1,'tg','@some_news_source')")
+    # RSS manba -> Telethon/session SHART EMAS (login kerak emas).
+    db.execute("INSERT INTO sources(id,kind,ref) VALUES (1,'rss','https://www.gazeta.uz/uz/rss/')")
     db.execute("""INSERT INTO channel_sources(channel_id,source_id,keywords)
-                  VALUES (1,1,'ai,startup')""")
+                  VALUES (1,1,'')""")
     db.execute("""INSERT INTO schedules(id,channel_id,post_type,cron,next_run)
                   VALUES (1,1,'scrape','*/30 * * * *',NULL)""")
     db.commit()
