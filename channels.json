@@ -1,11 +1,36 @@
 [
   {
-    "name": "Ajoyib Kun | Bugun",
-    "channel": "@ajoyib_kun_uz",
+    "name": "Morning Box",
+    "channel": "@morningbox",
     "token_env": "TELEGRAM_BOT_TOKEN",
-    "groups": ["A", "B", "C", "D", "M"],
-    "news_daily_cap": 6,
-    "footer_services": "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar"
+    "groups": ["O"],
+    "slots": {"O": [7.0]},
+    "voice": "blog",
+    "blog_image": true,
+    "blog_words": [130, 220],
+    "voice_persona": "Morning Box muharriri — O'zbekistonning eng ishonchli premium bilim brendi; ziyoli, vazmin, professional, zamonaviy va samimiy ustoz",
+    "voice_focus": "MISSIYA: har kuni o'quvchini aqlliroq, dono, intizomli va qobiliyatliroq qiladigan BITTA kuchli g'oya ber; ma'lumot emas, O'ZGARISH yarat. TUZILMA (har post shu 3 savolga javob bersin): (1) Nega bu muhim? (2) Qanday ishlaydi? (3) O'quvchi buni BUGUN qanday qo'llaydi? — va oxirida ALBATTA bitta aniq amaliy HARAKAT bilan yakunla. SIFAT VA HAQIQAT: faqat ishonchli bilimga tayan (kitoblar, tadqiqotlar, universitetlar, rasmiy kompaniya bloglari); statistika, raqam yoki iqtibosni HECH QACHON to'qima — aniq bilmasang umumiy fikr bilan cheklan, nom/raqam o'ylab topma; boshqa kanal postlarini nusxalama — hamma narsani originaldan yoz. OHANG: premium, minimal, professional, vazmin, nafis, ishonchli; clickbait, spam yoki mubolag'a yo'q; tezlik uchun sifatni, ko'rish (view) uchun ishonchni qurbon qilma; past sifatli post chiqarma. DARAJA: har post Morning Brew, Huberman Lab, Harvard Business Review, Farnam Street, Blinkist, James Clear, Ali Abdaal kabi brendlar darajasida bo'lsin. AUDITORIYA: 18-40 yosh, biznes, marketing, kitob, psixologiya, mahsuldorlik va o'z ustida ishlashga qiziquvchilar.",
+    "blog_themes": [
+      "biznes strategiyasi va barqaror o'sish modeli",
+      "marketing va brending: mijoz psixologiyasi",
+      "sotuv san'ati va ishontirish (sales)",
+      "kuchli kitob xulosasi va undan amaliy saboq",
+      "psixologiya: inson xulqi va qaror qabul qilish",
+      "mahsuldorlik, fokus va vaqtni boshqarish",
+      "foydali odatlar va intizom psixologiyasi",
+      "sun'iy intellekt (AI) va undan amaliy foydalanish",
+      "texnologiya va kelajak ko'nikmalari",
+      "ingliz tili: foydali ibora va o'rganish usuli",
+      "arab tili: foydali so'z va uning ma'nosi",
+      "islomiy donolik va hayotiy hikmat",
+      "ta'sirli muloqot va gapirish mahorati",
+      "liderlik va kuchli jamoa qurish",
+      "tanqidiy va mustaqil fikrlash",
+      "pul, moliyaviy savodxonlik va boylik ongi",
+      "tadbirkorlik yo'li: sinov, xato va saboqlar",
+      "karyera o'sishi va kasbiy mahorat"
+    ],
+    "footer_services": "📦 Har kuni bitta kuchli g'oya · 📚 Bilim · 🧠 Tafakkur"
   },
   {
     "name": "Futbol Xabarlari",

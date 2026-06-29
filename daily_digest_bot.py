@@ -1743,7 +1743,7 @@ BLOG_FORMATS = [
 ]
 
 
-def post_original_blog(focus=None, themes=None, persona=None, as_image=False) -> bool:
+def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
@@ -1759,6 +1759,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False) ->
         theme = random.choice(choices)
         fmt = random.choice(BLOG_FORMATS)
         who = persona or "tajribali, samimiy bloger"
+        lo, hi = (words or (90, 160))         # har-kanal so'z chegarasi (Morning Box -> uzunroq)
         focus_line = (f"Kanal yo'nalishi (e'tiborga ol): {focus}\n" if focus else "")
         prompt = (
             f"Sen O'zbek tilida (lotin alifbosida) yozadigan {who}san. "
@@ -1775,7 +1776,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False) ->
             "Kitob, muallif yoki iqtibosga ishora qilsang \u2014 faqat ROSTDAN aniq bilganingni yoz; "
             "ishonching komil bo'lmasa, umumiy fikr bilan cheklan, nom to'qima.\n"
             "- Kuchli birinchi jumla bilan boshla; oxirida kichik xulosa yoki o'ylantiruvchi savol qoldir.\n"
-            "- 90-160 so'z. Faqat oddiy matn \u2014 HTML, markdown yoki yulduzcha (*) ishlatma.\n"
+            f"- {lo}-{hi} so'z. Faqat oddiy matn \u2014 HTML, markdown yoki yulduzcha (*) ishlatma.\n"
             "- 1-3 ta mos emoji bo'lsa bo'ladi, ortiqcha emas.\n"
             "- Sarlavha yoki 'Mavzu:' yozma \u2014 to'g'ridan-to'g'ri post matnini ber.\n"
             + focus_line
@@ -2052,7 +2053,8 @@ def run_channel(now, date_label, group, cfg) -> list:
         okO = post_original_blog(focus=cfg.get("voice_focus"),
                                  themes=cfg.get("blog_themes"),
                                  persona=cfg.get("voice_persona"),
-                                 as_image=cfg.get("blog_image", False))
+                                 as_image=cfg.get("blog_image", False),
+                                 words=cfg.get("blog_words"))
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:
