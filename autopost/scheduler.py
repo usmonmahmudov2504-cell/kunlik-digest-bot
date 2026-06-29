@@ -58,9 +58,12 @@ async def handle_job(database, job) -> None:
         print(f"  [{channel}] modul yuklanmadi: {e}")
         return
 
+    MAX_PER_TICK = 3                        # bir yurishda ko'pi bilan -> kanal toshib ketmasin
     items = await scraper.fetch_for_channel(database, job["channel_id"])
     posted = 0
     for it in items:
+        if posted >= MAX_PER_TICK:
+            break
         c_hash = db.content_hash(it["text"])
         if db.is_duplicate(database, job["channel_id"], c_hash):
             continue

@@ -96,7 +96,7 @@ def seed_demo() -> None:
                 '👉 {channel} · obuna bo''ling 🔔','#AvtoPost',1)""")
     db.execute("INSERT INTO clients(id,name) VALUES (1,'Demo mijoz')")
     db.execute("""INSERT INTO channels(id,client_id,pattern_id,tg_chat,title)
-                  VALUES (1,1,1,'@avtopost_demo','AvtoPost Demo')""")
+                  VALUES (1,1,1,'@morningbox','HAYA COLLECTION')""")
     # RSS manba -> Telethon/session SHART EMAS (login kerak emas).
     db.execute("INSERT INTO sources(id,kind,ref) VALUES (1,'rss','https://www.gazeta.uz/uz/rss/')")
     db.execute("""INSERT INTO channel_sources(channel_id,source_id,keywords)
