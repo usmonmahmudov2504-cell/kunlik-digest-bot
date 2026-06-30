@@ -10,11 +10,47 @@ Ishga tushirish:  python admin_bot.py   (ENV: MB_BOT_TOKEN, MB_ADMIN_ID)
 """
 from __future__ import annotations
 import os
+import glob
+import shutil
 import asyncio
+import subprocess
 import db
 
 TOKEN = os.environ.get("MB_BOT_TOKEN", "")
 ADMIN = int(os.environ.get("MB_ADMIN_ID", "0") or 0)
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # repo ildizi
+
+
+def _git_exe():
+    """git.exe ni topadi: PATH yoki GitHub Desktop ichidan."""
+    g = shutil.which("git")
+    if g:
+        return g
+    pats = glob.glob(os.path.expanduser(
+        r"~\AppData\Local\GitHubDesktop\app-*\resources\app\git\cmd\git.exe"))
+    return pats[-1] if pats else None
+
+
+def _sync_db():
+    """box.db ni repoga commit+push -> GitHub Actions darrov ko'radi (sync)."""
+    git = _git_exe()
+    if not git:
+        print("⚠️ git topilmadi — box.db qo'lda push qilinishi kerak."); return
+    try:
+        subprocess.run([git, "add", "-f", "autopost/box.db"], cwd=REPO, timeout=30)
+        r = subprocess.run([git, "commit", "-m", "chore: autopost config [skip ci]"],
+                           cwd=REPO, capture_output=True, text=True, timeout=30)
+        if "nothing to commit" in (r.stdout + r.stderr):
+            return
+        subprocess.run([git, "pull", "--rebase", "origin", "main"], cwd=REPO, timeout=60)
+        subprocess.run([git, "push", "origin", "main"], cwd=REPO, timeout=60)
+        print("☁️ box.db push qilindi (Actions ko'radi).")
+    except Exception as e:
+        print("sync xato:", e)
+
+
+async def sync():
+    await asyncio.to_thread(_sync_db)
 
 # Jadval presetlari (tugma matni -> cron). Vaqtga bog'liq emas (interval).
 CRONS = {
@@ -49,6 +85,12 @@ def main():
     from aiogram.utils.keyboard import InlineKeyboardBuilder
 
     db.init_db()
+    # Standart qolip/mijoz (kanallar shularga bog'lanadi)
+    if not rows("SELECT 1 FROM patterns WHERE id=1"):
+        q("INSERT INTO patterns(id,name,header,footer,hashtags,rewrite_lvl) "
+          "VALUES(1,'AvtoPost-default','🚀 <b>AvtoPost</b>',"
+          "'👉 {channel} · obuna bo''ling 🔔','#AvtoPost',1)")
+        q("INSERT OR IGNORE INTO clients(id,name) VALUES(1,'Asosiy')")
     bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
 
@@ -140,6 +182,7 @@ def main():
         q("INSERT INTO channels(client_id,pattern_id,tg_chat,title) VALUES(1,1,?,?)", (chat, chat))
         await state.clear()
         await m.answer(f"✅ Kanal qo'shildi: {chat}", reply_markup=kb_channels())
+        await sync()
 
     @dp.callback_query(F.data.startswith("chdel:"))
     async def chdel(c: CallbackQuery):
@@ -147,6 +190,7 @@ def main():
         q("UPDATE channels SET is_active=0 WHERE id=?", (cid,))
         await c.message.edit_text("🗑 O'chirildi.", reply_markup=kb_channels())
         await c.answer("O'chirildi")
+        await sync()
 
     # --- Manbalar ---
     @dp.callback_query(F.data == "m:src")
@@ -170,6 +214,7 @@ def main():
         q("INSERT INTO sources(kind,ref) VALUES(?,?)", (d["kind"], m.text.strip()))
         await state.clear()
         await m.answer(f"✅ Manba qo'shildi ({d['kind']}): {m.text.strip()}", reply_markup=kb_sources())
+        await sync()
 
     @dp.callback_query(F.data.startswith("srcdel:"))
     async def srcdel(c: CallbackQuery):
@@ -177,6 +222,7 @@ def main():
         q("UPDATE sources SET is_active=0 WHERE id=?", (sid,))
         await c.message.edit_text("🗑 O'chirildi.", reply_markup=kb_sources())
         await c.answer("O'chirildi")
+        await sync()
 
     # --- Bog'lash: kanal -> manba -> kalit so'z ---
     @dp.callback_query(F.data == "m:link")
@@ -225,6 +271,7 @@ def main():
         if not ex:
             q("INSERT INTO schedules(channel_id,post_type,cron,next_run) VALUES(?,?,?,NULL)",
               (channel_id, "scrape", "*/30 * * * *"))
+        await sync()
 
     @dp.callback_query(F.data == "lkw:all", St.link_keywords)
     async def link_all(c: CallbackQuery, state: FSMContext):
@@ -277,6 +324,7 @@ def main():
               (int(cid), "scrape", cron))
         await c.message.edit_text(f"✅ Jadval o'rnatildi: <b>{label}</b>", reply_markup=kb_home())
         await c.answer("Saqlandi")
+        await sync()
 
     print("🟢 AvtoPost admin (tugmali) ishga tushdi.")
     asyncio.run(dp.start_polling(bot))
