@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS channels (
   tg_chat     TEXT NOT NULL,           -- @username yoki -100... chat_id
   title       TEXT,
   tz          TEXT DEFAULT 'Asia/Tashkent',
+  markup      INTEGER DEFAULT 0,       -- narx ustamasi (%) -> do'kon postlarini qimmatroq
   is_active   INTEGER DEFAULT 1
 );
 

@@ -109,7 +109,8 @@ def main():
         b.button(text="📡 Manbalar", callback_data="m:src")
         b.button(text="🔗 Bog'lash", callback_data="m:link")
         b.button(text="⏰ Jadval", callback_data="m:sch")
-        b.adjust(2, 2)
+        b.button(text="💰 Narx ustamasi", callback_data="m:markup")
+        b.adjust(2, 2, 1)
         return b.as_markup()
 
     def kb_back():
@@ -323,6 +324,37 @@ def main():
             q("INSERT INTO schedules(channel_id,post_type,cron,next_run) VALUES(?,?,?,NULL)",
               (int(cid), "scrape", cron))
         await c.message.edit_text(f"✅ Jadval o'rnatildi: <b>{label}</b>", reply_markup=kb_home())
+        await c.answer("Saqlandi")
+        await sync()
+
+    # --- Narx ustamasi (do'kon postlarini qimmatroq qilish) ---
+    @dp.callback_query(F.data == "m:markup")
+    async def m_markup(c: CallbackQuery):
+        chs = rows("SELECT id,tg_chat,COALESCE(markup,0) AS markup FROM channels WHERE is_active=1")
+        if not chs:
+            return await c.answer("Avval kanal qo'shing", show_alert=True)
+        await c.message.edit_text(
+            "💰 <b>Narx ustamasi</b>\nDo'kon postlaridagi narxni avtomatik oshiradi.\nQaysi kanal?",
+            reply_markup=kb_pick("mkc", "ch", chs, lambda r: f"{r['tg_chat']} ({r['markup']}%)"))
+        await c.answer()
+
+    @dp.callback_query(F.data.startswith("mkc:"))
+    async def markup_pick(c: CallbackQuery):
+        cid = int(c.data.split(":")[1])
+        b = InlineKeyboardBuilder()
+        for p in (0, 10, 15, 20, 30, 50):
+            b.button(text=("O'chirish" if p == 0 else f"+{p}%"), callback_data=f"mkset:{cid}:{p}")
+        b.button(text="⬅️ Orqaga", callback_data="home")
+        b.adjust(3, 3, 1)
+        await c.message.edit_text("Narx necha foizga oshirilsin?", reply_markup=b.as_markup())
+        await c.answer()
+
+    @dp.callback_query(F.data.startswith("mkset:"))
+    async def markup_set(c: CallbackQuery):
+        _, cid, pct = c.data.split(":")
+        q("UPDATE channels SET markup=? WHERE id=?", (int(pct), int(cid)))
+        msg = "O'chirildi" if pct == "0" else f"Narx +{pct}% oshiriladi"
+        await c.message.edit_text(f"✅ {msg}", reply_markup=kb_home())
         await c.answer("Saqlandi")
         await sync()
 

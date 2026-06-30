@@ -104,6 +104,43 @@ def spin(t: str) -> str:
     return _WORD.sub(lambda m: SYN.get(m.group().lower(), m.group()), t)
 
 
+# Narx: raqam + valyuta (so'm/sum/$/dollar). 4+ raqamli -> tasodifiy sonni o'tkazib yuboradi.
+_PRICE_AFTER = re.compile(
+    r"(\d[\d\s. ,]{3,})\s*(so'm|so‘m|so’m|sum|сум|сўм|\$|dollar|y\.?\s?e\.?|у\.?\s?е\.?)", re.I)
+_PRICE_USD = re.compile(r"\$\s?(\d(?:[\d\s,]*\d)?)")   # oxiri raqam -> nuqta/probel yutilmaydi
+
+
+def _fmt_num(n: int) -> str:
+    return f"{n:,}".replace(",", " ")
+
+
+def reprice(t: str, percent: int = 0) -> str:
+    """Postdagi narxlarni `percent` foizga oshiradi (do'kon reseller uchun).
+
+    so'm -> 1000 ga, dollar -> butun songa yaxlitlanadi. percent<=0 -> tegmaydi."""
+    if percent <= 0 or not t:
+        return t
+
+    def bump_after(m):
+        digits = re.sub(r"\D", "", m.group(1))
+        if len(digits) < 4:                       # 4 raqamdan kam -> narx emas, tegmaymiz
+            return m.group(0)
+        new = int(digits) * (100 + percent) / 100
+        new = round(new / 1000) * 1000
+        return _fmt_num(new) + " " + m.group(2)
+
+    def bump_usd(m):
+        digits = re.sub(r"\D", "", m.group(1))
+        if not digits:
+            return m.group(0)
+        new = round(int(digits) * (100 + percent) / 100)
+        return "$" + _fmt_num(new)
+
+    t = _PRICE_AFTER.sub(bump_after, t)
+    t = _PRICE_USD.sub(bump_usd, t)
+    return t
+
+
 def make_hashtags(t: str, base: str = "", n: int = 2) -> str:
     """Hashtag: ot/brendlarni afzal ko'radi (bosh harfli so'z) + chastota.
 
@@ -122,17 +159,23 @@ def make_hashtags(t: str, base: str = "", n: int = 2) -> str:
     return (base + " " + auto).strip()
 
 
-def brandify(raw: str, pattern: dict | None = None, channel: str = "") -> str:
-    """To'liq quvur: xom post -> AvtoPost brendidagi tayyor matn."""
+def brandify(raw: str, pattern: dict | None = None, channel: str = "", markup: int = 0) -> str:
+    """To'liq quvur: xom post -> AvtoPost brendidagi tayyor matn.
+
+    markup>0 -> DO'KON rejimi: narx oshiriladi va to'liq matn saqlanadi (qisqartirilmaydi)."""
     pattern = pattern or {}
     lvl = int(pattern.get("rewrite_lvl", 1) or 0)
 
     t = normalize(clean(raw))
-    title, body = restructure(t)
-    if lvl >= 2:
-        body = spin(body)
-    if lvl == 0:                          # faqat tozalash rejimi
+    if markup and markup > 0:             # do'kon posti: narxni oshir + to'liq saqla
+        t = reprice(t, markup)
         title, body = "", t
+    else:
+        title, body = restructure(t)
+        if lvl >= 2:
+            body = spin(body)
+        if lvl == 0:                      # faqat tozalash rejimi
+            title, body = "", t
 
     tags = make_hashtags(t, pattern.get("hashtags", ""))
     header = pattern.get("header", "🚀 <b>AvtoPost</b>")

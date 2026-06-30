@@ -26,6 +26,11 @@ def init_db() -> None:
         sql = f.read()
     db = connect()
     db.executescript(sql)
+    # Migratsiya: eski box.db'da markup ustuni bo'lmasligi mumkin -> qo'shamiz
+    try:
+        db.execute("ALTER TABLE channels ADD COLUMN markup INTEGER DEFAULT 0")
+    except Exception:
+        pass
     db.commit()
     db.close()
 
@@ -45,7 +50,8 @@ def content_hash(text: str) -> str:
 def get_due_schedules(db, now: str) -> list[sqlite3.Row]:
     """Vaqti kelgan (next_run<=now) faol jadvallar — kanal/qolip bilan birga."""
     return db.execute("""
-        SELECT s.*, c.tg_chat, c.title AS ch_title, c.pattern_id, c.id AS channel_id
+        SELECT s.*, c.tg_chat, c.title AS ch_title, c.pattern_id, c.id AS channel_id,
+               COALESCE(c.markup, 0) AS markup
         FROM schedules s
         JOIN channels c ON c.id = s.channel_id
         WHERE s.is_active = 1 AND c.is_active = 1
