@@ -3,7 +3,7 @@
     "name": "Morning Box",
     "channel": "@morningbox",
     "token_env": "TELEGRAM_BOT_TOKEN",
-    "discussion_chat_id": 0,
+    "discussion_chat_id": -1002820737739,
     "groups": ["O"],
     "slots": {"O": [7.0]},
     "voice": "blog",
