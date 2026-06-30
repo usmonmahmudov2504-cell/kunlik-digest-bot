@@ -1211,8 +1211,14 @@ def _wx_emoji(desc: str) -> str:
     return "\u2600\ufe0f"              # ☀️
 
 
+# Premium minimal divayder (Telegram TEXT Design System).
+_DIV = "━━━━━━━━━━━━━━"
+
+
 def _channel_footer() -> str:
-    """Har post tagidagi DOIMIY (bir xil) brend footeri: xizmatlar + obuna + ulashish."""
+    """Har post tagidagi DOIMIY (bir xil) premium brend footeri: kanal nomi + xizmat + handle.
+
+    Brend DINAMIK -> har kanal o'z nomini oladi (mas. Dollar Kursi -> @DollarKursis)."""
     ch = str(TELEGRAM_CHANNEL).strip()
     if not ch.startswith("@"):
         return ""
@@ -1220,9 +1226,10 @@ def _channel_footer() -> str:
     # Ko'rinadigan matn = chiroyli kanal nomi; havola esa o'sha kanalga (o'zgarmaydi).
     label = html.escape(CHANNEL_NAME or ch, quote=False)
     link = f'<a href="https://t.me/{uname}">{label}</a>'
-    return ("\n\n━━━━━━━━━━━━━━"
+    return ("\n\n" + _DIV +
+            f"\n{link}"
             f"\n{FOOTER_SERVICES}"
-            f"\n👉 {link} — obuna bo'ling 🔔 · ulashing 📢")
+            f"\n🔔 @{uname}")
 
 
 def _append_footer(text: str) -> str:
@@ -1254,11 +1261,11 @@ def _vary(key) -> str:
 
 # Har post turi uchun QAT'IY (doim bir xil) hashtaglar -> tartibli, kategoriyalangan.
 _TAGS = {
-    "weather": "#ObHavo #Ozbekiston",
+    "weather": "#ObHavo",
     "day": "#Bugun #Kun #Taqvim",
-    "rates": "#ValyutaKurslari #Kurs #Markaziybank",
-    "dollar": "#DollarKursi #Dollar #Kurs",
-    "market": "#Oltin #Bitcoin #Bozor #Kripto",
+    "rates": "#Valyuta",
+    "dollar": "#DollarKursi #Dollar",
+    "market": "#Kripto #Bozor",
     "news": "#TezkorXabar #Yangilik",
     "advice": "#Motivatsiya",
 }
@@ -1271,14 +1278,12 @@ def _tags(key, extra=None) -> str:
 
 
 def weather_caption(date_label, weather) -> str:
-    """Ob-havo posti uchun elegant, emoji bilan caption (barcha viloyatlar)."""
-    parts = [f"\U0001F326\ufe0f <b>Ob-havo</b> \u2014 {date_label}", ""]
+    """Ob-havo posti (Template 3): premium minimal matn \u2014 viloyat \u00b7 harorat."""
+    parts = ["\U0001F326\ufe0f <b>Bugungi ob-havo</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
     for region, (temp, desc) in weather.items():
-        parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>  <i>{desc}</i>")
-    parts.append("")
-    parts.append(_vary("weather"))
-    parts.append("")
-    parts.append(_tags("weather"))
+        parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>")
+    parts += ["", _DIV, "", "\u2600\ufe0f Hammaga unumli kun!", "",
+              "\U0001F4CC Manba: Open-Meteo", "", _tags("weather")]
     return _finish(parts)
 
 
@@ -1342,15 +1347,12 @@ def currency_overview_caption(date_label, rows) -> str:
              "KZT": "\U0001F1F0\U0001F1FF", "CNY": "\U0001F1E8\U0001F1F3",
              "JPY": "\U0001F1EF\U0001F1F5", "TRY": "\U0001F1F9\U0001F1F7",
              "AED": "\U0001F1E6\U0001F1EA", "KRW": "\U0001F1F0\U0001F1F7"}
-    parts = [f"\U0001F4B6 <b>Valyuta kurslari</b> \u2014 {date_label}", "",
-             "<i>Markaziy bank rasmiy kursi (1 birlik uchun)</i>", ""]
+    parts = ["\U0001F4B1 <b>Valyuta kurslari</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
     for r in rows:
-        parts.append(f"{flags.get(r['code'], '')} <b>{r['code']}</b> "
-                     f"({r['unit']}) \u2014 {r['rate']} so'm")
-    parts.append("")
-    parts.append("\U0001F4B5 Dollarning banklar bo'yicha kursi \u2014 keyingi postda")
-    parts.append("")
-    parts.append(_tags("rates"))
+        u = f" ({r['unit']})" if str(r.get("unit")) not in ("1", "", "None") else ""
+        parts.append(f"{flags.get(r['code'], '')} <b>{r['code']}</b>{u} \u2014 {r['rate']}")
+    parts += ["", _DIV, "", "\U0001F3DB Markaziy bank kursi", "",
+              "\U0001F4CC Manba: cbu.uz", "", _tags("rates")]
     return _finish(parts)
 
 
@@ -1399,51 +1401,46 @@ def regional_dollar_caption(date_label, banks) -> str | None:
 
 
 def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
-    """Dollar posti caption: rasmiy kurs + eng yaxshi olish/sotish (to'liq jadval rasmda)."""
-    extra_rates = extra_rates or []
+    """Dollar posti (Template 1): rasmiy CBU + eng qimmat oluvchi / eng arzon sotuvchi bank."""
     valid = [b for b in banks if b.get("buy") and b.get("sell")]
     best_sell = min(valid, key=lambda b: b["sell"], default=None)
     best_buy = max(valid, key=lambda b: b["buy"], default=None)
 
-    parts = [f"\U0001F4B5 <b>Dollar kursi</b> \u2014 {date_label}", ""]
-    parts.append(f"\U0001F3E6 Markaziy bank (rasmiy): <b>{cbu_rate}</b>")
-    parts.append("")
+    parts = ["\U0001F4B5 <b>Dollar kursi</b>", f"\U0001F4C5 {date_label}", "", _DIV, "",
+             "\U0001F3E6 Markaziy bank (rasmiy)", f"<b>{cbu_rate}</b>"]
     if best_buy and best_sell:
-        parts.append("\U0001F7E2 <b>Sotmoqchilarga</b> \u2014 eng qimmat oladigan bank:")
-        parts.append(f"   {best_buy['bank']} \u00b7 <b>{best_buy['buy']:,} so'm</b>".replace(",", " "))
-        parts.append("")
-        parts.append("\U0001F535 <b>Olmoqchilarga</b> \u2014 eng arzon sotadigan bank:")
-        parts.append(f"   {best_sell['bank']} \u00b7 <b>{best_sell['sell']:,} so'm</b>".replace(",", " "))
-        parts.append("")
-    if extra_rates:
-        flags = {"EUR": "\U0001F1EA\U0001F1FA", "RUB": "\U0001F1F7\U0001F1FA",
-                 "GBP": "\U0001F1EC\U0001F1E7", "KZT": "\U0001F1F0\U0001F1FF",
-                 "CNY": "\U0001F1E8\U0001F1F3"}
-        pairs = [f"{flags.get(e['code'], '')} {e['code']} {e['rate']}" for e in extra_rates]
-        parts.append("\U0001F4B6 <b>Boshqa valyutalar</b> (rasmiy): " + "   ".join(pairs[:3]))
-        parts.append("")
-    parts.append("\U0001F4CA To'liq banklar jadvali \u2014 rasmda \u2b06\ufe0f")
-    parts.append("\U0001F7E2 yashil \u2014 eng qimmat oladi \u00b7 \U0001F535 ko'k \u2014 eng arzon sotadi")
-    parts.append("")
-    parts.append(_tags("dollar"))
+        parts += ["", _DIV, "",
+                  "\U0001F4CA Eng qimmat sotib oluvchi",
+                  f"{best_buy['bank']} \u2014 <b>{best_buy['buy']:,} so'm</b>".replace(",", " "),
+                  "",
+                  "\U0001F4CA Eng arzon sotuvchi",
+                  f"{best_sell['bank']} \u2014 <b>{best_sell['sell']:,} so'm</b>".replace(",", " ")]
+    parts += ["", _DIV, "", "\U0001F4CC Manba: CBU \u00b7 banklar", "", _tags("dollar")]
     return _finish(parts)
 
 
+_MKT_EMOJI = {"oltin": "\U0001F947", "gold": "\U0001F947", "bitcoin": "\u20bf", "btc": "\u20bf",
+              "ethereum": "\u039e", "eth": "\u039e", "bnb": "\U0001FA99", "solana": "\u25ce",
+              "sol": "\u25ce", "xrp": "\U0001F48E"}
+
+
 def market_caption(date_label, rows) -> str:
-    """Bozor (oltin + kripto) posti caption."""
-    parts = [f"\U0001F4C8 <b>Jahon bozori</b> \u2014 {date_label}", ""]
+    """Jahon bozori posti (Template 4): har aktiv \u2014 nom + narx + o'zgarish."""
+    parts = ["\U0001F4C8 <b>Jahon bozori</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
     for r in rows:
-        line = f"<b>{r['name']}</b>: {r['value']}"
+        key = str(r["name"]).lower()
+        em = next((v for k, v in _MKT_EMOJI.items() if k in key), "\U0001F538")
+        val = str(r["value"])
         if r.get("chg") is not None:
-            arrow = "\U0001F53A" if r["chg"] >= 0 else "\U0001F53B"
-            line += f"  {arrow} {abs(r['chg']):.2f}%".replace(".", ",")
-        parts.append(line)
-        if "gramm" in r.get("sub", ""):
-            parts.append(f"   <i>{r['sub']}</i>")
-    parts.append("")
-    parts.append("<i>Narxlar jahon bozori bo'yicha (USD)</i>")
-    parts.append("")
-    parts.append(_tags("market"))
+            arrow = "\u25b2" if r["chg"] >= 0 else "\u25bc"
+            val += f"  {arrow}{abs(r['chg']):.2f}%"
+        parts.append(f"{em} <b>{r['name']}</b>")
+        parts.append(val)
+        parts.append("")
+    if parts and parts[-1] == "":
+        parts.pop()
+    parts += ["", _DIV, "", "Narxlar USD bo'yicha.", "",
+              "\U0001F4CC Manba: GoldAPI \u00b7 CoinGecko", "", _tags("market")]
     return _finish(parts)
 
 
@@ -1863,6 +1860,19 @@ def safe_post(render_fn, caption, label):
         return False
 
 
+def emit_post(render_fn, caption, label, text_only=False):
+    """text_only -> faqat MATN posti (rasm-kartasiz, premium TEXT design); aks holda rasm + caption."""
+    if text_only:
+        try:
+            post_message(caption, link_preview={"is_disabled": True})
+            print(f"{label} \u2713 (matn)")
+            return True
+        except Exception as e:
+            print(f"{label} XATO: {e}")
+            return False
+    return safe_post(render_fn, caption, label)
+
+
 
 # ------------------------------------------------------------------ MAIN
 UZ_DAYS = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
@@ -1958,6 +1968,7 @@ def run_channel(now, date_label, group, cfg) -> list:
     ch = str(TELEGRAM_CHANNEL)
     groups_on = set(cfg.get("groups", ["A", "B", "C", "D", "M"]))
     slots_cfg = cfg.get("slots", {})        # har-kanal jadval: {"D":[...], "M":[...]}
+    text_only = cfg.get("text_only", False)  # premium TEXT design -> rasm-kartasiz matn postlari
     today = now.strftime("%Y-%m-%d")
     daily_state = load_daily() if group == "AUTO" else {}
 
@@ -2022,9 +2033,9 @@ def run_channel(now, date_label, group, cfg) -> list:
     # --- B guruh: Ob-havo ---
     if want("B"):
         weather = get_all_weather()
-        okB = safe_post(
+        okB = emit_post(
             lambda: render_weather_card(date_label, weather, "p4.png", ch),
-            weather_caption(date_label, weather), "Ob-havo")
+            weather_caption(date_label, weather), "Ob-havo", text_only)
         results.append(okB)
         if okB:
             done_today.append("B")
@@ -2144,14 +2155,14 @@ def run_channel(now, date_label, group, cfg) -> list:
         prev_rates = load_prev_rates()                 # kechagi kurslar (o'zgarish uchun)
         prev_usd = prev_rates.get("USD")
         usd_value = next((r["value"] for r in overview if r["code"] == "USD"), None)
-        ok_rates = safe_post(
+        ok_rates = emit_post(
             lambda: render_currency_overview_card(date_label, overview, "p5.png", ch, prev_rates),
-            currency_overview_caption(date_label, overview), "Kurslar")
+            currency_overview_caption(date_label, overview), "Kurslar", text_only)
         results.append(ok_rates)
-        results.append(safe_post(
+        results.append(emit_post(
             lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch,
                                          usd_value=usd_value, prev_usd=prev_usd),
-            currency_caption(date_label, cbu_text, banks), "Dollar"))
+            currency_caption(date_label, cbu_text, banks), "Dollar", text_only))
         # O'zgarish (▲/▼) doim KECHA bilan solishtirilsin -> kurslarni kuniga faqat
         # birinchi postda saqlaymiz (keyingi 2 post o'sha kungi kecha bilan taqqoslaydi).
         if ok_rates and daily_state.get("Dsaved") != today:
@@ -2170,9 +2181,9 @@ def run_channel(now, date_label, group, cfg) -> list:
         rows = market_rows(m, prev_m.get("gold"))
         ok_m = False
         if rows:
-            ok_m = safe_post(
+            ok_m = emit_post(
                 lambda: render_market_card(date_label, rows, "p7.png", ch),
-                market_caption(date_label, rows), "Bozor")
+                market_caption(date_label, rows), "Bozor", text_only)
             results.append(ok_m)
             if ok_m and m.get("gold"):
                 save_prev_market({"gold": m["gold"]})
