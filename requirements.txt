@@ -3,3 +3,4 @@ feedparser
 anthropic
 beautifulsoup4
 Pillow
+python-telegram-bot>=20.0
