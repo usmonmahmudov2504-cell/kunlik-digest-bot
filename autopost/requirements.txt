@@ -1,5 +1,6 @@
 # AvtoPost — yengil bog'liqliklar (pandas/numpy/sklearn YO'Q)
 aiohttp          # publisher (Bot API, async)
+aiogram          # admin_bot.py (tugmali boshqaruv paneli)
 telethon         # scraper (manba kanallarni o'qish, MTProto)
 feedparser       # rss manbalar (ixtiyoriy)
 apscheduler      # faqat `serve` (always-on) rejimi uchun (ixtiyoriy)
