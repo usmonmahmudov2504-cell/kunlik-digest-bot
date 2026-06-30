@@ -52,7 +52,7 @@
     "channel": "@DollarKursis",
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["D", "M", "B"],
-    "slots": {"D": [9.0, 12.0, 15.0, 18.0], "M": [11.0, 17.0]},
+    "slots": {"D": [9.0], "M": [11.0]},
     "text_only": true,
     "footer_services": "💵 Har kun dollar, valyuta va bozor"
   },
