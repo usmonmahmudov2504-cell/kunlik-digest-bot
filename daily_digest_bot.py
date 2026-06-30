@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import io
 import re
+import csv
 import html
 import json
 import random
@@ -1568,11 +1569,12 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
             resp2.raise_for_status()
 
 
-def post_breaking(item, translate=None, voice=None, focus=None, persona=None) -> bool:
+def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no_iv=False) -> bool:
     """Tezkor xabar (toza): rasm tepada + qisqa matn + pastda "Instant View" tugma.
 
     voice="blog" -> matn bir kishi yuritayotgan shaxsiy blog ovozida qayta yoziladi.
     Tugma telegra.ph IV sahifasini ochadi (to'liq maqola, ichida rasm bilan).
+    no_iv=True -> Instant View tugmasi qo'shilmaydi (kanal sozlamasidan).
     """
     try:
         title = item["title"] if isinstance(item, dict) else item
@@ -1607,10 +1609,14 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None) ->
         elif ch.startswith("@"):
             cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
                     " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
-        # Instant View sahifasi + pastdagi tugma (translate -> ichi ham o'zbekcha)
-        iv_url = make_instant_view(item, translate=translate) or link
-        button = ({"inline_keyboard": [[{"text": "\u26a1 Instant View", "url": iv_url}]]}
-                  if iv_url else None)
+        # Instant View sahifasi + pastdagi tugma (translate -> ichi ham o'zbekcha).
+        # no_iv -> tugma butunlay yo'q (telegra.ph sahifasi ham yaratilmaydi).
+        if no_iv:
+            button = None
+        else:
+            iv_url = make_instant_view(item, translate=translate) or link
+            button = ({"inline_keyboard": [[{"text": "\u26a1 Instant View", "url": iv_url}]]}
+                      if iv_url else None)
         img = fetch_news_image([item], "news_banner.png")
         if img:
             post_photo(img, cap, reply_markup=button)            # rasm tepada
@@ -1743,24 +1749,48 @@ BLOG_FORMATS = [
 ]
 
 
-def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None) -> bool:
+def calendar_entry(now, fname="editorial_calendar.csv"):
+    """Bugungi kun uchun tahririyat kalendaridagi yozuvni qaytaradi (yilga bog'liq emas).
+
+    Kun raqami (1..365) bo'yicha qidiradi -> har yili o'sha sanada o'sha mavzu. Kabisa yilida
+    366-kun 365 ga qisiladi. Fayl yo'q / topilmasa -> None (chaqiruvchi tasodifiy mavzuga qaytadi).
+    """
+    doy = min(now.timetuple().tm_yday, 365)
+    path = os.path.join(HERE, fname)
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                if str(row.get("Kun", "")).strip() == str(doy):
+                    return row
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print("Kalendar o'qishda xato:", e)
+    return None
+
+
+def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None,
+                       theme=None, cta=None) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
     as_image=True -> matn chiroyli kartaga (PNG) chizilib, rasm sifatida yuboriladi.
-    Aylanma mavzu + format; yaqinda ishlatilganini takrorlamaydi (blog_state.json).
+    theme berilsa -> o'sha aniq mavzu (tahririyat kalendaridan); aks holda aylanma tasodifiy.
+    cta berilsa -> post o'sha aniq amaliy harakat bilan yakunlanadi.
     LLM (Gemini->Claude) bo'lmasa -> post yo'q (False), bot davom etadi.
     """
     try:
-        pool = themes or BLOG_THEMES
         st = _load_json("blog_state.json", {})
-        recent = st.get("recent", [])
-        choices = [t for t in pool if t not in recent[-6:]] or pool
-        theme = random.choice(choices)
+        if not theme:                         # kalendar bermasa -> aylanma tasodifiy mavzu
+            pool = themes or BLOG_THEMES
+            recent = st.get("recent", [])
+            choices = [t for t in pool if t not in recent[-6:]] or pool
+            theme = random.choice(choices)
         fmt = random.choice(BLOG_FORMATS)
         who = persona or "tajribali, samimiy bloger"
         lo, hi = (words or (90, 160))         # har-kanal so'z chegarasi (Morning Box -> uzunroq)
         focus_line = (f"Kanal yo'nalishi (e'tiborga ol): {focus}\n" if focus else "")
+        cta_line = (f"- Postni aynan shu amaliy harakat bilan yakunla: {cta}\n" if cta else "")
         prompt = (
             f"Sen O'zbek tilida (lotin alifbosida) yozadigan {who}san. "
             "O'quvching \u2014 fikrlaydigan, o'zini rivojlantirishni istagan odamlar.\n"
@@ -1779,6 +1809,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             f"- {lo}-{hi} so'z. Faqat oddiy matn \u2014 HTML, markdown yoki yulduzcha (*) ishlatma.\n"
             "- 1-3 ta mos emoji bo'lsa bo'ladi, ortiqcha emas.\n"
             "- Sarlavha yoki 'Mavzu:' yozma \u2014 to'g'ridan-to'g'ri post matnini ber.\n"
+            + cta_line
             + focus_line
         )
         text = llm_text(prompt, max_tokens=900)
@@ -2030,7 +2061,8 @@ def run_channel(now, date_label, group, cfg) -> list:
             print("Yangi xabar yo'q yoki kunlik limit to'ldi.")
         n_ok = 0
         for it in fresh:
-            ok = post_breaking(it, translate=translate, voice=voice, focus=focus, persona=persona)
+            ok = post_breaking(it, translate=translate, voice=voice, focus=focus, persona=persona,
+                               no_iv=cfg.get("no_instant_view", False))
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
@@ -2050,11 +2082,19 @@ def run_channel(now, date_label, group, cfg) -> list:
 
     # --- O guruh: Original blog (yangilikka bog'liq emas — biznes, motivatsiya, ...) ---
     if want("O"):
+        cal_theme = cal_cta = None
+        if cfg.get("calendar"):               # tahririyat kalendari -> bugungi aniq mavzu
+            entry = calendar_entry(now, cfg["calendar"])
+            if entry:
+                cal_theme = (entry.get("Mavzu") or "").strip() or None
+                cal_cta = (entry.get("CTA taklifi") or "").strip() or None
+                print(f"  [kalendar] bugungi mavzu: {cal_theme}")
         okO = post_original_blog(focus=cfg.get("voice_focus"),
                                  themes=cfg.get("blog_themes"),
                                  persona=cfg.get("voice_persona"),
                                  as_image=cfg.get("blog_image", False),
-                                 words=cfg.get("blog_words"))
+                                 words=cfg.get("blog_words"),
+                                 theme=cal_theme, cta=cal_cta)
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:

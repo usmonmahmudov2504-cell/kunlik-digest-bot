@@ -51,9 +51,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
           FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
-          # Qo'lda (workflow_dispatch) ishga tushirilsa -> vaqt darvozasini chetlab o'tamiz
-          # (test qulay bo'lsin). Jadval (schedule/AUTO) -> bo'sh, darvoza ishlaydi.
-          FORCE_POST: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+          # FORCE_POST faqat QO'LDA, aniq guruh tanlab test qilinganda (group != AUTO).
+          # cron-job.org heartbeat'i AUTO yuboradi -> FORCE_POST BO'SH -> tungi darvoza
+          # (23:00-07:00) ishlaydi va kechasi post chiqmaydi.
+          FORCE_POST: ${{ github.event_name == 'workflow_dispatch' && steps.grp.outputs.group != 'AUTO' && '1' || '' }}
 
       # Holatni (tezkor dedup + kunlik belgilar) repoga saqlash (faqat o'zgargan bo'lsa).
       # MUHIM: main oldinga ketgan bo'lsa (boshqa commit) oddiy push RAD etiladi va holat

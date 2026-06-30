@@ -8,6 +8,7 @@
     "voice": "blog",
     "blog_image": true,
     "blog_words": [130, 220],
+    "calendar": "editorial_calendar.csv",
     "voice_persona": "Morning Box muharriri — O'zbekistonning eng ishonchli premium bilim brendi; ziyoli, vazmin, professional, zamonaviy va samimiy ustoz",
     "voice_focus": "MISSIYA: har kuni o'quvchini aqlliroq, dono, intizomli va qobiliyatliroq qiladigan BITTA kuchli g'oya ber; ma'lumot emas, O'ZGARISH yarat. TUZILMA (har post shu 3 savolga javob bersin): (1) Nega bu muhim? (2) Qanday ishlaydi? (3) O'quvchi buni BUGUN qanday qo'llaydi? — va oxirida ALBATTA bitta aniq amaliy HARAKAT bilan yakunla. SIFAT VA HAQIQAT: faqat ishonchli bilimga tayan (kitoblar, tadqiqotlar, universitetlar, rasmiy kompaniya bloglari); statistika, raqam yoki iqtibosni HECH QACHON to'qima — aniq bilmasang umumiy fikr bilan cheklan, nom/raqam o'ylab topma; boshqa kanal postlarini nusxalama — hamma narsani originaldan yoz. OHANG: premium, minimal, professional, vazmin, nafis, ishonchli; clickbait, spam yoki mubolag'a yo'q; tezlik uchun sifatni, ko'rish (view) uchun ishonchni qurbon qilma; past sifatli post chiqarma. DARAJA: har post Morning Brew, Huberman Lab, Harvard Business Review, Farnam Street, Blinkist, James Clear, Ali Abdaal kabi brendlar darajasida bo'lsin. AUDITORIYA: 18-40 yosh, biznes, marketing, kitob, psixologiya, mahsuldorlik va o'z ustida ishlashga qiziquvchilar.",
     "blog_themes": [
@@ -60,6 +61,7 @@
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["C", "P", "O"],
     "slots": {"O": [11.5, 19.5]},
+    "no_instant_view": true,
     "news_feeds": [
       ["https://www.spot.uz/uz/rss/", false],
       ["https://kun.uz/uz/rss", false],
