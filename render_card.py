@@ -747,44 +747,159 @@ def render_results_card(date_label, matches, out_path="results.png", channel_lab
 
 
 def render_standings_card(date_label, groups, out_path="standings.png", channel_label="", comp="JCH-2026"):
-    W, pad, gap = 900, 40, 24
-    colw = (W - 2 * pad - gap) // 2
+    W, pad = 900, 32
+    GAP = 14                    # ustunlar orasidagi bo'shliq
+    GRP_HDR = 44                # guruh sarlavhasi balandligi
+    COL_HDR = 28                # ustun nomlari qatori
+    DARK_GRN = (15, 79, 43)    # guruh sarlavhasi rangi
+    PROMO_GRN = (240, 253, 244) # o'tuvchi qatorlar foni (yashil och)
+    PROMO_BAR = (16, 185, 129)  # chap aksent chiziq rangi
+    ALT = (248, 250, 252)       # juft qator foni (alternatsiya)
+    is_single = len(groups) == 1
+
+    # ---- yagona guruh (CL, PL va h.k.) — to'liq kenglik ----
+    if is_single:
+        name, rows = next(iter(groups.items()))
+        ROW_H = 46
+        H = pad + 96 + 18 + 28 + GRP_HDR + COL_HDR + len(rows) * ROW_H + 14 + 48
+        img, d = _new(W, H)
+        _pitch_header(img, W, pad, "Turnir jadvali", date_label)
+
+        y = pad + 96 + 10
+        d.text((pad + 4, y), f"{comp} · ochko jadvali", font=R(22), fill=MUTED)
+        y += 28
+
+        # Guruh sarlavhasi — to'q yashil band
+        d.rounded_rectangle((pad, y, W - pad, y + GRP_HDR), radius=10, fill=DARK_GRN)
+        gname = name.replace("GROUP_", "Guruh ").replace("Group", "Guruh").replace("League phase", "Guruh bosqichi")
+        d.text((pad + 18, y + 9), gname, font=B(28), fill=(255, 255, 255))
+        y += GRP_HDR
+
+        # Ustun nomlari
+        cx_o   = W - pad - 132
+        cx_gd  = W - pad - 76
+        cx_pts = W - pad - 18
+        d.text((pad + 66, y + 5),  "Jamoa",  font=R(17), fill=MUTED)
+        d.text((cx_o  - d.textlength("O",   font=R(17)) / 2, y + 5), "O",   font=R(17), fill=MUTED)
+        d.text((cx_gd - d.textlength("+/-", font=R(17)) / 2, y + 5), "+/-", font=R(17), fill=MUTED)
+        d.text((cx_pts - d.textlength("B",  font=R(17)) / 2, y + 5), "B",   font=R(17), fill=MUTED)
+        y += COL_HDR
+
+        for i, r in enumerate(rows):
+            rank = int(r.get("rank") or 99)
+            # Tur bosqichlari: >=1-8 to'g'ridan-to'g'ri, 9-24 pley-off, 25+ tushadi
+            promo = rank <= 8
+            playoff = 9 <= rank <= 24
+            row_fill = PROMO_GRN if promo else (245, 247, 255) if playoff else (CARD if i % 2 == 0 else ALT)
+            d.rounded_rectangle((pad, y, W - pad, y + ROW_H - 2), radius=8, fill=row_fill)
+            bar_col = PROMO_BAR if promo else ACCENT if playoff else None
+            if bar_col:
+                d.rounded_rectangle((pad, y, pad + 5, y + ROW_H - 2), radius=4, fill=bar_col)
+
+            cy = y + ROW_H // 2
+            # Raqam (o'rin)
+            rk_str = str(rank)
+            rk_col = (202, 138, 4) if rank == 1 else (148, 163, 184) if rank == 2 else (205, 92, 92) if rank == 3 else MUTED
+            rk_w = d.textlength(rk_str, font=B(22))
+            d.text((pad + 8 + (26 - rk_w) / 2, cy - 12), rk_str, font=B(22), fill=rk_col)
+            # Bayroq
+            tx = pad + 42
+            bb = _badge(r.get("badge"), 30)
+            if bb:
+                img.paste(bb, (pad + 40, cy - bb.height // 2), bb)
+                tx = pad + 40 + bb.width + 8
+            # Jamoa nomi
+            max_nw = cx_o - tx - 16
+            d.text((tx, cy - 13), _ellipsize(d, _tname(r.get("team"), 20), R(24), max_nw), font=R(24), fill=TEXT)
+            # Statistikalar (markazlashgan)
+            p_str = str(r.get("p", ""))
+            d.text((cx_o  - d.textlength(p_str,  font=R(22)) / 2, cy - 12), p_str,  font=R(22), fill=MUTED)
+            gd_val = r.get("gd") or 0
+            gd_str = ("+" if gd_val > 0 else "") + str(gd_val)
+            gd_col = GREEN if gd_val > 0 else RED if gd_val < 0 else MUTED
+            d.text((cx_gd - d.textlength(gd_str, font=R(22)) / 2, cy - 12), gd_str, font=R(22), fill=gd_col)
+            pts_str = str(r.get("pts", ""))
+            d.text((cx_pts - d.textlength(pts_str, font=B(26)) / 2, cy - 13), pts_str, font=B(26), fill=TEXT)
+            y += ROW_H
+
+        _footer(d, W, H, pad, channel_label, "Manba: football-data.org")
+        img.save(out_path)
+        return out_path
+
+    # ---- ko'p guruh (JCH va h.k.) — 2 ustunli grid ----
+    colw = (W - 2 * pad - GAP) // 2
+    ROW_H = 38
+    SUBPAD = 4
 
     def gh(n):
-        return 34 + 28 + n * 32 + 22
+        return GRP_HDR + COL_HDR + n * ROW_H + 18
+
     colh, colgroups = [0, 0], [[], []]
     for name, rows in groups.items():
         c = 0 if colh[0] <= colh[1] else 1
         colgroups[c].append((name, rows))
         colh[c] += gh(len(rows))
-    H = pad + 96 + 40 + 34 + (max(colh) if any(colh) else 60) + 50
+    H = pad + 96 + 18 + 28 + (max(colh) if any(colh) else 60) + 50
     img, d = _new(W, H)
     _pitch_header(img, W, pad, "Turnir jadvali", date_label)
-    d.text((pad + 4, pad + 96 + 40), f"{comp} · ochko jadvali", font=R(22), fill=MUTED)
-    y0 = pad + 96 + 40 + 34
-    for cx, gc in [(pad, colgroups[0]), (pad + colw + gap, colgroups[1])]:
+
+    y0 = pad + 96 + 10
+    d.text((pad + 4, y0), f"{comp} · ochko jadvali", font=R(22), fill=MUTED)
+    y0 += 28
+
+    cx_pts_off = colw - 16          # o'ng chekkadan oʻrin (ochko)
+    cx_gd_off  = colw - 62
+    cx_o_off   = colw - 112
+
+    for cx, gc in [(pad, colgroups[0]), (pad + colw + GAP, colgroups[1])]:
         y = y0
-        for name, rows in gc:
-            d.text((cx + 4, y), name.replace("Group", "Guruh"), font=B(26), fill=ACCENT)
-            y += 34
-            d.text((cx + colw - 150, y), "O", font=R(18), fill=MUTED)
-            d.text((cx + colw - 102, y), "+/-", font=R(18), fill=MUTED)
-            d.text((cx + colw - 40, y), "B", font=R(18), fill=MUTED)
-            y += 28
-            for r in rows:
-                top = int(r.get("rank") or 9) <= 2
-                d.text((cx + 4, y), str(r.get("rank", "")), font=B(22), fill=(GREEN if top else MUTED))
-                tx = cx + 34
-                bb = _badge(r.get("badge"), 24)
+        for gname_raw, rows in gc:
+            gname = (gname_raw.replace("GROUP_", "Guruh ")
+                               .replace("Group", "Guruh")
+                               .replace("League phase", "Guruh bosqichi"))
+
+            # Guruh sarlavhasi
+            d.rounded_rectangle((cx, y, cx + colw, y + GRP_HDR), radius=10, fill=DARK_GRN)
+            d.text((cx + 14, y + 9), gname, font=B(26), fill=(255, 255, 255))
+            # Ustun nomlari
+            y += GRP_HDR
+            d.text((cx + cx_o_off  - d.textlength("O",   font=R(17)) / 2, y + 5), "O",   font=R(17), fill=MUTED)
+            d.text((cx + cx_gd_off - d.textlength("+/-", font=R(17)) / 2, y + 5), "+/-", font=R(17), fill=MUTED)
+            d.text((cx + cx_pts_off - d.textlength("B",  font=R(17)) / 2, y + 5), "B",  font=R(17), fill=MUTED)
+            y += COL_HDR
+
+            for i, r in enumerate(rows):
+                rank = int(r.get("rank") or 99)
+                top = rank <= 2
+                row_fill = PROMO_GRN if top else (CARD if i % 2 == 0 else ALT)
+                d.rounded_rectangle((cx + SUBPAD, y, cx + colw - SUBPAD, y + ROW_H - 2), radius=7, fill=row_fill)
+                if top:
+                    d.rounded_rectangle((cx + SUBPAD, y, cx + SUBPAD + 4, y + ROW_H - 2), radius=4, fill=PROMO_BAR)
+
+                cy = y + ROW_H // 2
+                rk_str = str(rank)
+                rk_col = (202, 138, 4) if rank == 1 else (148, 163, 184) if rank == 2 else MUTED
+                rk_w = d.textlength(rk_str, font=B(20))
+                d.text((cx + SUBPAD + 6 + (20 - rk_w) / 2, cy - 11), rk_str, font=B(20), fill=rk_col)
+                tx = cx + SUBPAD + 32
+                bb = _badge(r.get("badge"), 26)
                 if bb:
-                    img.paste(bb, (cx + 32, y - 1), bb)
-                    tx = cx + 32 + bb.width + 8
-                d.text((tx, y - 1), _tname(r.get("team"), 12), font=R(21), fill=TEXT)
-                d.text((cx + colw - 150, y), str(r.get("p", "")), font=R(20), fill=MUTED)
-                d.text((cx + colw - 104, y), str(r.get("gd", "")), font=R(20), fill=MUTED)
-                d.text((cx + colw - 42, y), str(r.get("pts", "")), font=B(22), fill=TEXT)
-                y += 32
-            y += 22
+                    img.paste(bb, (cx + SUBPAD + 30, cy - bb.height // 2), bb)
+                    tx = cx + SUBPAD + 30 + bb.width + 6
+                max_nw = cx + cx_o_off - 18 - tx
+                d.text((tx, cy - 11), _ellipsize(d, _tname(r.get("team"), 14), R(21), max_nw), font=R(21), fill=TEXT)
+
+                p_str = str(r.get("p", ""))
+                d.text((cx + cx_o_off  - d.textlength(p_str,  font=R(19)) / 2, cy - 11), p_str,  font=R(19), fill=MUTED)
+                gd_val = r.get("gd") or 0
+                gd_str = ("+" if gd_val > 0 else "") + str(gd_val)
+                gd_col = GREEN if gd_val > 0 else RED if gd_val < 0 else MUTED
+                d.text((cx + cx_gd_off - d.textlength(gd_str, font=R(19)) / 2, cy - 11), gd_str, font=R(19), fill=gd_col)
+                pts_str = str(r.get("pts", ""))
+                d.text((cx + cx_pts_off - d.textlength(pts_str, font=B(22)) / 2, cy - 12), pts_str, font=B(22), fill=TEXT)
+                y += ROW_H
+            y += 18
+
     _footer(d, W, H, pad, channel_label, "Manba: football-data.org")
     img.save(out_path)
     return out_path
@@ -895,8 +1010,69 @@ def render_blog_card(text, channel_label="", out_path="blog.png", accent=PURPLE)
 
 
 if __name__ == "__main__":
-    out = "/home/claude/dist"
-    dl = "21-iyun, 2026 \u00b7 Yakshanba"
+    import sys
+    out = os.path.join(HERE, "test_out")
+    os.makedirs(out, exist_ok=True)
+    dl = "30-iyun, 2026"
+
+    # --- Standings test (JCH ko'p guruh) ---
+    if "standings" in sys.argv or "all" in sys.argv or len(sys.argv) == 1:
+        jch_groups = {
+            "Group A": [
+                {"rank": 1, "team": "Meksika",      "badge": None, "p": 3, "gd":  6, "pts": 9},
+                {"rank": 2, "team": "JAR",           "badge": None, "p": 3, "gd": -1, "pts": 4},
+                {"rank": 3, "team": "Janubiy Koreya","badge": None, "p": 3, "gd": -1, "pts": 3},
+                {"rank": 4, "team": "Chexiya",       "badge": None, "p": 3, "gd": -4, "pts": 1},
+            ],
+            "Group B": [
+                {"rank": 1, "team": "Shveytsariya", "badge": None, "p": 3, "gd":  4, "pts": 7},
+                {"rank": 2, "team": "Kanada",        "badge": None, "p": 3, "gd":  5, "pts": 4},
+                {"rank": 3, "team": "Bosniya",       "badge": None, "p": 3, "gd": -1, "pts": 4},
+                {"rank": 4, "team": "Qatar",         "badge": None, "p": 3, "gd": -8, "pts": 1},
+            ],
+            "Group C": [
+                {"rank": 1, "team": "Braziliya",  "badge": None, "p": 3, "gd":  6, "pts": 7},
+                {"rank": 2, "team": "Marokash",   "badge": None, "p": 3, "gd":  3, "pts": 7},
+                {"rank": 3, "team": "Shotlandiya","badge": None, "p": 3, "gd": -3, "pts": 3},
+                {"rank": 4, "team": "Gaiti",      "badge": None, "p": 3, "gd": -6, "pts": 0},
+            ],
+            "Group D": [
+                {"rank": 1, "team": "AQSH",      "badge": None, "p": 3, "gd":  4, "pts": 6},
+                {"rank": 2, "team": "Avstraliya","badge": None, "p": 3, "gd":  0, "pts": 4},
+                {"rank": 3, "team": "Paragvay",  "badge": None, "p": 3, "gd": -2, "pts": 4},
+                {"rank": 4, "team": "Turkiya",   "badge": None, "p": 3, "gd": -2, "pts": 3},
+            ],
+        }
+        p = render_standings_card(dl, jch_groups, f"{out}/standings_jch.png", "@FutbolUz25", "JCH-2026")
+        print(f"JCH jadval:  {p}")
+
+    # --- Standings test (CL yagona guruh) ---
+    if "cl" in sys.argv or "all" in sys.argv or len(sys.argv) == 1:
+        cl_rows = [
+            {"rank":  1, "team": "Arsenal FC",       "badge": None, "p": 8, "gd": 19, "pts": 24},
+            {"rank":  2, "team": "FC Bayern M.",      "badge": None, "p": 8, "gd": 14, "pts": 21},
+            {"rank":  3, "team": "Liverpool FC",      "badge": None, "p": 8, "gd": 12, "pts": 18},
+            {"rank":  4, "team": "Tottenham H.",      "badge": None, "p": 8, "gd": 10, "pts": 17},
+            {"rank":  5, "team": "FC Barcelona",      "badge": None, "p": 8, "gd":  8, "pts": 16},
+            {"rank":  6, "team": "Chelsea FC",        "badge": None, "p": 8, "gd":  7, "pts": 16},
+            {"rank":  7, "team": "Sporting CL.",      "badge": None, "p": 8, "gd":  6, "pts": 16},
+            {"rank":  8, "team": "Manchester C.",     "badge": None, "p": 8, "gd":  6, "pts": 16},
+            {"rank":  9, "team": "Real Madrid",       "badge": None, "p": 8, "gd":  9, "pts": 15},
+            {"rank": 10, "team": "FC Internazionale", "badge": None, "p": 8, "gd":  8, "pts": 15},
+            {"rank": 11, "team": "Paris Saint-G.",    "badge": None, "p": 8, "gd": 10, "pts": 14},
+            {"rank": 12, "team": "Newcastle Utd",     "badge": None, "p": 8, "gd": 10, "pts": 14},
+            {"rank": 13, "team": "Juventus FC",       "badge": None, "p": 8, "gd":  4, "pts": 13},
+            {"rank": 14, "team": "Club Atletico",     "badge": None, "p": 8, "gd":  2, "pts": 13},
+            {"rank": 15, "team": "Atalanta BC",       "badge": None, "p": 8, "gd":  0, "pts": 13},
+            {"rank": 16, "team": "Bayer 04 Lev.",     "badge": None, "p": 8, "gd": -1, "pts": 12},
+            {"rank": 25, "team": "Olympique M.",      "badge": None, "p": 8, "gd": -3, "pts":  9},
+            {"rank": 26, "team": "Paphos FC",         "badge": None, "p": 8, "gd": -3, "pts":  9},
+            {"rank": 35, "team": "Villarreal CF",     "badge": None, "p": 8, "gd":-13, "pts":  1},
+            {"rank": 36, "team": "FK Kairat",         "badge": None, "p": 8, "gd":-15, "pts":  1},
+        ]
+        p = render_standings_card(dl, {"League phase": cl_rows},
+                                  f"{out}/standings_cl.png", "@FutbolUz25", "Chempionlar ligasi")
+        print(f"CL jadval:   {p}")
     render_day_card(dl, "Yakshanba", "Yoz", 172, 193, 25,
                     ["Xalqaro yoga kuni", "Yozgi quyosh turishi (eng uzun kun)"],
                     f"{out}/p1-bugun.png", "@oq_xabar")
