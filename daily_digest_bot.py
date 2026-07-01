@@ -1811,9 +1811,9 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
     """
     try:
         st = _load_json("blog_state.json", {})
+        recent = st.get("recent", [])
         if not theme:                         # kalendar bermasa -> aylanma tasodifiy mavzu
             pool = themes or BLOG_THEMES
-            recent = st.get("recent", [])
             choices = [t for t in pool if t not in recent[-6:]] or pool
             theme = random.choice(choices)
         fmt = random.choice(BLOG_FORMATS)
