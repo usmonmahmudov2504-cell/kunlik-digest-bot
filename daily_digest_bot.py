@@ -143,13 +143,19 @@ WEATHER_CODES = {
 
 
 def get_all_weather() -> dict[str, tuple]:
-    """14 viloyat uchun (harorat, holat)ni bitta Open-Meteo so'rovida oladi."""
+    """14 viloyat uchun BUGUNGI kunning (eng yuqori harorat, holat)ini oladi.
+
+    MUHIM: 'current' (aynan shu daqiqadagi harorat) EMAS -> kunlik forecast (max harorat)
+    ishlatiladi. Aks holda post qaysi soatda chiqishiga bog'liq bo'lib qoladi (masalan
+    ertalab soat 7:45 da chiqsa -- past harorat), holbuki "Bugungi ob-havo" deb yozilgan
+    va tushlikka kelib havo isib ketadi -> foydalanuvchi ma'lumotni xato deb o'ylaydi.
+    """
     lats = ",".join(str(v[0]) for v in REGIONS.values())
     lons = ",".join(str(v[1]) for v in REGIONS.values())
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lats}&longitude={lons}"
-        "&current=temperature_2m,weather_code&timezone=Asia/Tashkent"
+        "&daily=temperature_2m_max,weather_code&timezone=Asia/Tashkent&forecast_days=1"
     )
     data = requests.get(url, headers=UA, timeout=20).json()
     # Bir nechta koordinata -> javob ro'yxat bo'lib qaytadi
@@ -157,21 +163,26 @@ def get_all_weather() -> dict[str, tuple]:
         data = [data]
     out: dict[str, tuple] = {}
     for region, item in zip(REGIONS, data):
-        cur = item["current"]
-        desc = WEATHER_CODES.get(cur["weather_code"], "ochiq")
-        out[region] = (cur["temperature_2m"], desc)
+        daily = item["daily"]
+        desc = WEATHER_CODES.get(daily["weather_code"][0], "ochiq")
+        out[region] = (daily["temperature_2m_max"][0], desc)
     return out
 
 
 # ------------------------------------------------------------------ CBU
 # Umumiy kurslar postida ko'rsatiladigan valyutalar (USD birinchi).
 OVERVIEW_CCY = ["USD", "EUR", "GBP", "RUB", "KZT", "CNY", "JPY", "TRY", "AED", "KRW"]
-# Dollar postidagi "boshqa valyutalar" qatori uchun (caption)
-EXTRA_CCY = ["EUR", "RUB", "GBP", "KZT", "CNY"]
+# Dollar posti ("Rasmiy kurs" bo'limi) uchun — screenshot dizayniga mos tartib.
+EXTRA_CCY = ["USD", "RUB", "EUR", "KGS", "TRY", "KZT"]
 CCY_NAMES = {
     "USD": "AQSH dollari", "EUR": "Yevro", "GBP": "Funt sterling", "RUB": "Rubl",
     "KZT": "Tenge", "CNY": "Yuan", "JPY": "Yaponiya iyenasi", "TRY": "Turk lirasi",
     "AED": "BAA dirhami", "KRW": "Koreya voni",
+}
+# Dollar posti krill dizaynidagi valyuta nomlari (EXTRA_CCY bilan mos).
+_RASMIY_CCY_NAMES = {
+    "USD": "доллар", "RUB": "рубль", "EUR": "евро",
+    "KGS": "сом", "TRY": "лира", "KZT": "тенге",
 }
 
 
@@ -1065,7 +1076,6 @@ def make_instant_view(item, translate=None) -> str | None:
 # ------------------------------------------------------------------ TEZKOR XABAR (holat)
 # Holat fayllari har kanal uchun alohida: state/<kanal>/... (takror, kunlik belgi, kurslar).
 # GitHub Actions har ish oxirida state/ ni repoga commit qiladi.
-MAX_ALERTS = 2        # bitta ishda ko'pi bilan necha yangi xabar post qilinadi
 STATE_KEEP = 200      # holatda saqlanadigan oxirgi yozuvlar soni
 
 
@@ -1400,22 +1410,37 @@ def regional_dollar_caption(date_label, banks) -> str | None:
     return _finish(parts)
 
 
-def currency_caption(date_label, cbu_rate, banks, extra_rates=None) -> str:
-    """Dollar posti (Template 1): rasmiy CBU + eng qimmat oluvchi / eng arzon sotuvchi bank."""
+def currency_caption(date_label, banks, extra_rates=None) -> str:
+    """Dollar posti \u2014 \"Dollar kursi | Rasmiy\" uslubidagi dizayn: bozor (bank) kursi
+    + CBU rasmiy kurslar, Markaziy bank havolasi va yangilanish vaqti bilan."""
     valid = [b for b in banks if b.get("buy") and b.get("sell")]
-    best_sell = min(valid, key=lambda b: b["sell"], default=None)
-    best_buy = max(valid, key=lambda b: b["buy"], default=None)
+    sell_rate = buy_rate = None
+    if valid:
+        sells = sorted(b["sell"] for b in valid)
+        buys = sorted(b["buy"] for b in valid)
+        sell_rate = sells[len(sells) // 2]
+        buy_rate = buys[len(buys) // 2]
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5)))
 
-    parts = ["\U0001F4B5 <b>Dollar kursi</b>", f"\U0001F4C5 {date_label}", "", _DIV, "",
-             "\U0001F3E6 Markaziy bank (rasmiy)", f"<b>{cbu_rate}</b>"]
-    if best_buy and best_sell:
-        parts += ["", _DIV, "",
-                  "\U0001F4CA Eng qimmat sotib oluvchi",
-                  f"{best_buy['bank']} \u2014 <b>{best_buy['buy']:,} so'm</b>".replace(",", " "),
-                  "",
-                  "\U0001F4CA Eng arzon sotuvchi",
-                  f"{best_sell['bank']} \u2014 <b>{best_sell['sell']:,} so'm</b>".replace(",", " ")]
-    parts += ["", _DIV, "", "\U0001F4CC Manba: CBU \u00b7 banklar", "", _tags("dollar")]
+    parts = ["\U0001F4B5 <b>\u0414\u043e\u043b\u043b\u0430\u0440 \u043a\u0443\u0440\u0441\u0438 | \u0420\u0430\u0441\u043c\u0438\u0439</b>", "", _DIV, ""]
+
+    if sell_rate and buy_rate:
+        parts += ["\U0001F4CA <b>\u0411\u043e\u0437\u043e\u0440 \u043a\u0443\u0440\u0441\u0438</b>", "",
+                  "\U0001F1FA\U0001F1F8 \u0414\u043e\u043b\u043b\u0430\u0440:",
+                  f"\U0001F53A \u0421\u043e\u0442\u0438\u0448: <b>{sell_rate:,} \u0441\u045e\u043c</b>".replace(",", " "),
+                  f"\U0001F53B \u041e\u043b\u0438\u0448: <b>{buy_rate:,} \u0441\u045e\u043c</b>".replace(",", " "),
+                  "", _DIV, ""]
+
+    parts += ["\U0001F4CB <b>\u0420\u0430\u0441\u043c\u0438\u0439 \u043a\u0443\u0440\u0441</b>", ""]
+    for r in (extra_rates or []):
+        name = _RASMIY_CCY_NAMES.get(r["code"])
+        if name:
+            parts.append(f"1 {name} = <b>{r['rate']} \u0441\u045e\u043c</b>")
+
+    parts += ["", _DIV, "",
+              '<a href="https://cbu.uz">\U0001F3DB \u041c\u0430\u0440\u043a\u0430\u0437\u0438\u0439 \u0411\u0430\u043d\u043a</a>', "",
+              f"\u267b\ufe0f \u042f\u043d\u0433\u0438\u043b\u0430\u043d\u0434\u0438: {now.strftime('%H:%M')}",
+              "", _tags("dollar")]
     return _finish(parts)
 
 
@@ -1746,19 +1771,27 @@ BLOG_FORMATS = [
 ]
 
 
-def calendar_entry(now, fname="editorial_calendar.csv"):
+def calendar_entry(now, fname="editorial_calendar.csv", slot=None):
     """Bugungi kun uchun tahririyat kalendaridagi yozuvni qaytaradi (yilga bog'liq emas).
 
     Kun raqami (1..365) bo'yicha qidiradi -> har yili o'sha sanada o'sha mavzu. Kabisa yilida
     366-kun 365 ga qisiladi. Fayl yo'q / topilmasa -> None (chaqiruvchi tasodifiy mavzuga qaytadi).
+
+    slot -> ixtiyoriy slot indeksi (masalan O-guruh ertalab=0/kechqurun=1). CSV'da "Slot" ustuni
+    bo'lsa va slot berilgan bo'lsa -> aynan shu kun+slot qatorini qaytaradi (bir kunda bir nechta
+    turli mavzu uchun). CSV'da "Slot" ustuni yo'q bo'lsa (masalan editorial_calendar.csv) -> avvalgi
+    xatti-harakat: birinchi mos "Kun" qatori (orqaga moslik saqlanadi, boshqa kanallar buzilmaydi).
     """
     doy = min(now.timetuple().tm_yday, 365)
     path = os.path.join(HERE, fname)
     try:
         with open(path, encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
-                if str(row.get("Kun", "")).strip() == str(doy):
-                    return row
+                if str(row.get("Kun", "")).strip() != str(doy):
+                    continue
+                if slot is not None and "Slot" in row and str(row.get("Slot", "")).strip() != str(slot):
+                    continue
+                return row
     except FileNotFoundError:
         pass
     except Exception as e:
@@ -2063,10 +2096,23 @@ def run_channel(now, date_label, group, cfg) -> list:
         cap = cfg.get("news_daily_cap")
         nd = _load_json("news_daily.json", {})
         if nd.get("date") != today:
-            nd = {"date": today, "count": 0}
-        per_run = MAX_ALERTS
+            nd = {"date": today, "count": 0, "last_ts": 0}
+        # Postlar kun bo'yi TEKIS taqsimlansin: tunda (NEWS_ACTIVE oynasidan tashqarida)
+        # to'plangan orqada qolgan xabarlar oyna ochilishi bilan BIRDANIGA burst
+        # bo'lib chiqmasin -> har post orasida minimal oraliq talab qilinadi (kunlik
+        # limitni faol soatlar bo'yicha teng bo'lib chiqadi).
+        active_span_min = (NEWS_ACTIVE[1] - NEWS_ACTIVE[0]) * 60
+        min_gap_min = cfg.get("news_min_gap_min")
+        if min_gap_min is None and cap:
+            min_gap_min = active_span_min / int(cap) * 0.8   # bir oz zaxira bilan
+        elapsed_min = (now.timestamp() - nd.get("last_ts", 0)) / 60.0
+        if min_gap_min and nd.get("last_ts") and elapsed_min < min_gap_min:
+            print(f"C guruh: navbatdagi post ~{min_gap_min - elapsed_min:.0f} daq keyin "
+                  "(tekis taqsimlash uchun kutilmoqda).")
+            fresh = []
+        per_run = 1                                   # bir yurishda bittadan -> burst yo'q
         if cap:
-            per_run = min(MAX_ALERTS, max(0, int(cap) - int(nd.get("count", 0))))
+            per_run = min(per_run, max(0, int(cap) - int(nd.get("count", 0))))
         fresh = fresh[:per_run]
         if not fresh:
             print("Yangi xabar yo'q yoki kunlik limit to'ldi.")
@@ -2080,8 +2126,9 @@ def run_channel(now, date_label, group, cfg) -> list:
                 n_ok += 1
         if fresh:
             save_posted(posted)
-        if cap and n_ok:
+        if n_ok:
             nd["count"] = int(nd.get("count", 0)) + n_ok
+            nd["last_ts"] = now.timestamp()
             _save_json("news_daily.json", nd)
 
     # --- P guruh: Startup uchun statistika (USD, Bitcoin, Yevro + yengil prognoz) ---
@@ -2095,7 +2142,7 @@ def run_channel(now, date_label, group, cfg) -> list:
     if want("O"):
         cal_theme = cal_cta = None
         if cfg.get("calendar"):               # tahririyat kalendari -> bugungi aniq mavzu
-            entry = calendar_entry(now, cfg["calendar"])
+            entry = calendar_entry(now, cfg["calendar"], slot=(o_due[0] if o_due else None))
             if entry:
                 cal_theme = (entry.get("Mavzu") or "").strip() or None
                 cal_cta = (entry.get("CTA taklifi") or "").strip() or None
@@ -2150,7 +2197,7 @@ def run_channel(now, date_label, group, cfg) -> list:
 
     # --- D guruh: Kurslar + Dollar (kuniga 3 marta; kurs kun davomida o'zgaradi) ---
     if want("D"):
-        cbu_text, overview, _ = get_cbu_rates()
+        cbu_text, overview, extras = get_cbu_rates()
         banks = get_bank_rates()
         prev_rates = load_prev_rates()                 # kechagi kurslar (o'zgarish uchun)
         prev_usd = prev_rates.get("USD")
@@ -2162,7 +2209,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         results.append(emit_post(
             lambda: render_currency_card(date_label, cbu_text, banks, "p6.png", ch,
                                          usd_value=usd_value, prev_usd=prev_usd),
-            currency_caption(date_label, cbu_text, banks), "Dollar", text_only))
+            currency_caption(date_label, banks, extras), "Dollar", text_only))
         # O'zgarish (▲/▼) doim KECHA bilan solishtirilsin -> kurslarni kuniga faqat
         # birinchi postda saqlaymiz (keyingi 2 post o'sha kungi kecha bilan taqqoslaydi).
         if ok_rates and daily_state.get("Dsaved") != today:
