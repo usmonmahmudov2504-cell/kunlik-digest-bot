@@ -209,13 +209,40 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     print(f"[{chat_id}] @{sender.username or user_id}: {user_text[:60]} → {reply[:60]}")
 
 
+# ------------------------------------------------------------------ HEALTH SERVER
+# Render.com web servis HTTP port ochilishini talab qiladi.
+# Bot polling bilan ishlaydi; bu kichik server faqat Render uchun port ochadi.
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+
+class _Health(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, *args):
+        pass
+
+
+def _start_health(port: int):
+    HTTPServer(("0.0.0.0", port), _Health).serve_forever()
+
+
 # ------------------------------------------------------------------ ISHGA TUSHIRISH
 def main() -> None:
     if not TELEGRAM_BOT_TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN o'rnatilmagan!")
 
+    # Render PORT bor bo'lsa health server ishga tushadi (fon thread)
+    port = int(os.environ.get("PORT", 0))
+    if port:
+        t = threading.Thread(target=_start_health, args=(port,), daemon=True)
+        t.start()
+        print(f"Health server port={port} da ishga tushdi.")
+
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    # Faqat oddiy matn xabarlari (buyruqlar — /start va h.k. — alohida handler kerak emas)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
     print("Discussion AI bot ishga tushdi (polling)...")
