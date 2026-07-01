@@ -17,6 +17,8 @@ import io
 import math
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import arabic_reshaper
+from bidi.algorithm import get_display
 
 # ---- Ranglar (oq/yorug' tema) ----
 BG     = (255, 255, 255)
@@ -105,6 +107,16 @@ def R(size):  # regular (matn)
 
 def G(size):  # ob-havo/simvol glyphlari (Inter qoplamaydi) -> DejaVu
     return _font("DejaVuSans.ttf", size)
+
+
+def AR(size):  # arabcha matn -> Noto Naskh Arabic (bog'langan harflar bilan chizadi)
+    return _font("NotoNaskhArabic-Regular.ttf", size)
+
+
+def _arabic_display(text: str) -> str:
+    """Arabcha matnni Pillow to'g'ri chiza olishi uchun tayyorlaydi:
+    harflarni bog'laydi (reshape) va o'ngdan-chapga tartibga soladi (bidi)."""
+    return get_display(arabic_reshaper.reshape(text))
 
 
 def _new(W, H):
@@ -564,6 +576,40 @@ def render_advice_card(date_label, kind, text, out_path="advice.png", channel_la
         y += 50
 
     _footer(d, W, H, pad, channel_label, "Kunlik biznes maslahati")
+    img.save(out_path)
+    return out_path
+
+
+def render_ibora_card(phrase, gloss="", out_path="ibora.png", channel_label="", accent=PURPLE):
+    """Kunlik ibora uchun -- katta, markazlashtirilgan arabcha so'z/ibora kartasi.
+
+    phrase -> arab yozuvidagi ibora (eroblar bilan bo'lishi mumkin). gloss -> qisqa
+    o'zbekcha ma'no (masalan "marhamat/arzimaydi"), kichikroq shriftda pastda."""
+    W, pad = 900, 40
+    max_w = W - 2 * pad - 60
+    disp = _arabic_display(phrase)
+
+    af = AR(72)
+    for size in (72, 60, 50, 42, 36):
+        af = AR(size)
+        if af.getlength(disp) <= max_w:
+            break
+
+    gf = R(30)
+    H = pad + 96 + 60 + 140 + (70 if gloss else 0) + 60
+    img, d = _new(W, H)
+    _header(img, W, pad, "Kunlik Ibora", "", accent, "advice")
+
+    y = pad + 96 + 70
+    pw = d.textlength(disp, font=af)   # o'ngga tekislangan (arabcha o'ngdan chapga o'qiladi)
+    d.text((W - pad - 30 - pw, y), disp, font=af, fill=TEXT)
+    y += 120
+
+    if gloss:
+        gw = d.textlength(gloss, font=gf)
+        d.text(((W - gw) / 2, y), gloss, font=gf, fill=MUTED)
+
+    _footer(d, W, H, pad, channel_label, "Kunlik ibora")
     img.save(out_path)
     return out_path
 

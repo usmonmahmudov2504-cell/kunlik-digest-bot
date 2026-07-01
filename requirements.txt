@@ -4,3 +4,5 @@ anthropic
 beautifulsoup4
 Pillow
 python-telegram-bot>=20.0
+arabic-reshaper
+python-bidi

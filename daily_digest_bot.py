@@ -39,7 +39,7 @@ from render_card import (
     render_day_card, render_news_card, render_weather_card,
     render_currency_overview_card, render_currency_card, render_advice_card,
     render_market_card, render_fixtures_card, render_results_card, render_standings_card,
-    render_goal_card, render_blog_card,
+    render_goal_card, render_blog_card, render_ibora_card,
 )
 
 # API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
@@ -1800,13 +1800,17 @@ def calendar_entry(now, fname="editorial_calendar.csv", slot=None):
 
 
 def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None,
-                       theme=None, cta=None) -> bool:
+                       theme=None, cta=None, ibora_phrase=None, ibora_gloss=None) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
     as_image=True -> matn chiroyli kartaga (PNG) chizilib, rasm sifatida yuboriladi.
     theme berilsa -> o'sha aniq mavzu (tahririyat kalendaridan); aks holda aylanma tasodifiy.
     cta berilsa -> post o'sha aniq amaliy harakat bilan yakunlanadi.
+    ibora_phrase berilsa -> matn KARTAGA emas, faqat shu arabcha ibora (katta, o'ngdan-chapga
+    to'g'ri chizilgan) kartaga tushadi; LLM matni esa Telegram CAPTION sifatida yuboriladi
+    (caption Telegram'ning o'z shrifti bilan chiziladi -> arabcha to'g'ri ko'rinadi, Pillow
+    kartada emas).
     LLM (Gemini->Claude) bo'lmasa -> post yo'q (False), bot davom etadi.
     """
     try:
@@ -1850,7 +1854,18 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
         ch = str(TELEGRAM_CHANNEL).strip()
         label = CHANNEL_NAME or ch
         posted = False
-        if as_image:
+        if ibora_phrase:
+            try:
+                img = render_ibora_card(ibora_phrase, ibora_gloss or "", "p_blog.png", label)
+                body = html.escape(text[:850], quote=False)   # sendPhoto caption limiti (1024) ichida xavfsiz
+                if ch.startswith("@"):
+                    body += (f"\n\n— <a href=\"https://t.me/{ch[1:]}\">"
+                             f"{html.escape(label, quote=False)}</a>")
+                post_photo(img, body)
+                posted = True
+            except Exception as e:
+                print(f"Ibora karta xato (matnga qaytamiz): {e}")
+        if not posted and as_image:
             try:
                 # Pillow rangli emoji'ni chiza olmaydi -> karta uchun emoji/belgilarni olib tashlaymiz
                 card_text = re.sub(
@@ -2141,18 +2156,25 @@ def run_channel(now, date_label, group, cfg) -> list:
     # --- O guruh: Original blog (yangilikka bog'liq emas — biznes, motivatsiya, ...) ---
     if want("O"):
         cal_theme = cal_cta = None
+        ibora_phrase = ibora_gloss = None
         if cfg.get("calendar"):               # tahririyat kalendari -> bugungi aniq mavzu
             entry = calendar_entry(now, cfg["calendar"], slot=(o_due[0] if o_due else None))
             if entry:
                 cal_theme = (entry.get("Mavzu") or "").strip() or None
                 cal_cta = (entry.get("CTA taklifi") or "").strip() or None
                 print(f"  [kalendar] bugungi mavzu: {cal_theme}")
+                # "Kunlik Ibora" ruknida mavzu "arabcha ibora — o'zbekcha ma'no" shaklida ->
+                # ajratib, katta arabcha-ibora kartasi uchun ishlatamiz (matn kartaga emas,
+                # caption'ga -> arabcha Telegram'ning o'z shrifti bilan to'g'ri chiziladi).
+                if entry.get("Kategoriya") == "Kunlik Ibora" and cal_theme and " — " in cal_theme:
+                    ibora_phrase, ibora_gloss = (s.strip() for s in cal_theme.split(" — ", 1))
         okO = post_original_blog(focus=cfg.get("voice_focus"),
                                  themes=cfg.get("blog_themes"),
                                  persona=cfg.get("voice_persona"),
                                  as_image=cfg.get("blog_image", False),
                                  words=cfg.get("blog_words"),
-                                 theme=cal_theme, cta=cal_cta)
+                                 theme=cal_theme, cta=cal_cta,
+                                 ibora_phrase=ibora_phrase, ibora_gloss=ibora_gloss)
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:
