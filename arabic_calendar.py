@@ -15,15 +15,43 @@ Chiqish: arabic_calendar.csv (730 qator: 365 kun x 2 slot) + konsol xulosasi.
 Run: python arabic_calendar.py
 """
 import csv
+import json
+import os
 import datetime as dt
 
 START = dt.date(2026, 1, 1)
 DAYS = 365
 SLOT_TIMES = ["08:00", "19:30"]
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 UZ_MONTHS = ["", "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
              "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"]
 UZ_WEEK = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
+
+
+def _load_tarjima_topics(path="arabic_sentences.json"):
+    """arabic_sentences.json'dagi manba gaplarni ketma-ket 2 tadan juftlab, (mavzu, CEFR)
+    ro'yxatiga aylantiradi. Daraja pozitsiyaga qarab taxminiy belgilanadi (birinchi uchdan
+    bir qismi A1, keyingisi A2, oxirgisi B1) -- manbada aniq daraja belgisi yo'q.
+
+    Fayl topilmasa -> bo'sh ro'yxat (chaqiruvchi xato bermaydi, faqat rukn bo'sh qoladi)."""
+    fpath = os.path.join(HERE, path)
+    try:
+        with open(fpath, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        print(f"OGOHLANTIRISH: {path} topilmadi -> Tarjima Mashqi ruknisiz davom etamiz.")
+        return [("(manba gap topilmadi)", "A1")]
+    sentences = data.get("sentences", [])
+    pairs = [sentences[i:i + 2] for i in range(0, len(sentences), 2)]
+    n = len(pairs)
+    topics = []
+    for i, pair in enumerate(pairs):
+        level = "A1" if i < n / 3 else ("A2" if i < 2 * n / 3 else "B1")
+        numbered = "  ".join(f"{j + 1}) {s}" for j, s in enumerate(pair))
+        topics.append((numbered, level))
+    return topics
+
 
 # ---------------------------------------------------------------- RUKN MA'LUMOTLARI
 # Har rukn: manba, muqova g'oyasi, "nega muhim", CTA to'plami va (mavzu, CEFR) mavzular banki.
@@ -96,39 +124,14 @@ CATS = {
       ("العين لا تعلو على الحاجب — kichik katta bo'lolmaydi (maqol, mavqe haqida)", "B1"),
     ],
   },
-  "Muhadasa Namunasi": {
-    "src": ["Kundalik muloqot vaziyatlari", "TPR/TPRS uslubi", "Amaliy sayohat frazalari"],
-    "cover": "Ikki qahramon (savol-javob bulutchasi) turli joy fonida (kafe, aeroport va h.k.)",
-    "why": "Real vaziyat dialogida so'z va grammatika birga, tabiiy tarzda yodda qoladi.",
-    "cta": ["Shu dialogni ovozli xabar qilib o'qib, komментga tashlang.",
-            "O'zingiz shu vaziyatda qanday javob berardingiz? Yozing.",
-            "Rolingizni tanlang (A yoki B) va dialogni davom ettiring."],
-    "topics": [
-      ("Kafeda buyurtma berish", "A1"),
-      ("Aeroportda chiptani ro'yxatdan o'tkazish (check-in)", "A2"),
-      ("Shifoxonada shifokor bilan suhbat", "A2"),
-      ("Do'konda narx so'rash va savdolashish", "A1"),
-      ("Mehmonxonada xona band qilish", "A2"),
-      ("Taksi chaqirish va manzilni tushuntirish", "A1"),
-      ("Restoranda hisob-kitob so'rash", "A1"),
-      ("Ko'chada yo'l so'rash", "A1"),
-      ("Bank bo'limida hisob ochish", "B1"),
-      ("Universitetda ro'yxatdan o'tish", "B1"),
-      ("Bozorda meva-sabzavot xarid qilish", "A1"),
-      ("Do'stni uyga taklif qilish", "A2"),
-      ("Telefon orqali uchrashuvni belgilash", "A2"),
-      ("Kiyim-kechak do'konida o'lcham so'rash", "A1"),
-      ("Poyezd/avtobus bekatida chipta olish", "A1"),
-      ("Restoranda ovqat allergiyasi haqida ogohlantirish", "B1"),
-      ("Ish suhbati (intervyu)da o'zini tanishtirish", "B1"),
-      ("Mehmon kutib olish va salomlashish odobi", "A1"),
-      ("Kiraverishda pasport tekshiruvi (chegara nazorati)", "A2"),
-      ("Dorixonada dori so'rash", "A2"),
-      ("Yo'qolgan buyumni topshirish/qidirish", "B1"),
-      ("Sartaroshxonada soch turmagini tushuntirish", "A2"),
-      ("Sport zalida abonement rasmiylashtirish", "B1"),
-      ("Kutubxonada kitob izlash", "A2"),
-    ],
+  "Tarjima Mashqi": {
+    "src": ["Nuriddin — «Arab tiliga tarjima qilish uchun mavzulashtirilgan gaplar» (tahrir: Usmon Mahmudov)"],
+    "cover": "Qo'lyozma daftar sahifasi motivi, gap raqami va tarjima strelkasi (UZ -> AR)",
+    "why": "Haqiqiy, tayyor manbadagi gapni tizimli, ketma-ket tarjima qilish — kursdek izchil o'sishni ta'minlaydi.",
+    "cta": ["Shu gaplarni o'zingiz arabchaga tarjima qilib ko'ring, keyin izohdagi javob bilan solishtiring.",
+            "Tarjimangizni izohda yozing — men tekshirib, xato bo'lsa tuzataman.",
+            "Shu gapni ovozli xabar qilib arabcha o'qib bering."],
+    "topics": _load_tarjima_topics(),
   },
   "Kitaba Shabloni": {
     "src": ["CEFR yozma imtihon namunalari", "Akademik arab tili qo'llanmalari", "Bog'lovchi so'zlar to'plami"],
@@ -270,7 +273,7 @@ CATS = {
 
 # Hafta kuni (0=Dushanba..6=Yakshanba) x slot (0=ertalab,1=kechqurun) -> rukn.
 # Round-robin: 7 rukn x 2 marta/hafta = 14 slot, mukammal muvozanat, bir kunda takror yo'q.
-CAT_ORDER = ["Kunlik Ibora", "Sinonim-Antonim", "Muhadasa Namunasi", "Kitaba Shabloni",
+CAT_ORDER = ["Kunlik Ibora", "Sinonim-Antonim", "Tarjima Mashqi", "Kitaba Shabloni",
              "Imtihon Strategiyasi", "Fusha-Ammiya", "Kino-Qoshiq Tahlili"]
 
 
