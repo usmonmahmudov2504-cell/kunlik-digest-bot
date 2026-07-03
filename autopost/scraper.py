@@ -8,6 +8,7 @@ ENV: MB_TG_API_ID, MB_TG_API_HASH, MB_TG_SESSION (StringSession matni).
 """
 from __future__ import annotations
 import os
+import re
 import db
 
 API_ID = os.environ.get("MB_TG_API_ID", "")
@@ -16,6 +17,27 @@ SESSION = os.environ.get("MB_TG_SESSION", "")
 PER_SOURCE = 5            # har manbadan ko'pi bilan nechta so'nggi xabar tekshiriladi
 
 _client = None            # bitta sessiyani qayta ishlatamiz
+
+# Manba nomlari (post oxirida "Manba: ..." uchun chiroyli ko'rsatish).
+_SRC_NAMES = {
+    "gazeta.uz": "Gazeta.uz", "kun.uz": "Kun.uz", "daryo.uz": "Daryo",
+    "spot.uz": "Spot.uz", "bbc.co": "BBC", "bbc.com": "BBC", "reuters.com": "Reuters",
+    "apnews.com": "AP", "cnn.com": "CNN", "techcrunch.com": "TechCrunch",
+    "nationalgeographic.com": "National Geographic", "aljazeera.com": "Al Jazeera",
+    "theverge.com": "The Verge", "euronews.com": "Euronews",
+}
+
+
+def _src_name(ref: str) -> str:
+    ref = ref or ""
+    if ref.startswith("@"):
+        return ref
+    m = re.search(r"https?://([^/]+)", ref)
+    host = (m.group(1) if m else ref).lower().replace("www.", "")
+    for dom, name in _SRC_NAMES.items():
+        if dom in host:
+            return name
+    return host.split(".")[0].capitalize() if host else "Manba"
 
 
 async def _get_client():
@@ -46,11 +68,13 @@ def _passes(text: str, keywords: str) -> bool:
 
 async def _fetch_tg(client, ref: str, keywords: str, source_id: int) -> list[dict]:
     out = []
+    name = _src_name(ref)
     try:
         async for msg in client.iter_messages(ref, limit=PER_SOURCE):
             txt = msg.message or ""
             if len(txt) >= 40 and _passes(txt, keywords):
-                out.append({"text": txt, "msg_id": msg.id, "source_id": source_id})
+                out.append({"text": txt, "msg_id": msg.id, "source_id": source_id,
+                            "source_name": name})
     except Exception as e:
         print(f"  Manba o'qishda xato ({ref}): {e}")
     return out
@@ -62,11 +86,13 @@ def _fetch_rss(ref: str, keywords: str, source_id: int) -> list[dict]:
     except Exception:
         return []
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"   # UA'siz ba'zi RSS bloklaydi
+    name = _src_name(ref)
     out = []
     for e in feedparser.parse(ref, agent=ua).entries[:PER_SOURCE]:
         txt = (e.get("title", "") + "\n" + e.get("summary", "")).strip()
         if len(txt) >= 40 and _passes(txt, keywords):
-            out.append({"text": txt, "msg_id": None, "source_id": source_id})
+            out.append({"text": txt, "msg_id": None, "source_id": source_id,
+                        "source_name": name})
     return out
 
 

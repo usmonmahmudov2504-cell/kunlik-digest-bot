@@ -159,10 +159,13 @@ def make_hashtags(t: str, base: str = "", n: int = 2) -> str:
     return (base + " " + auto).strip()
 
 
-def brandify(raw: str, pattern: dict | None = None, channel: str = "", markup: int = 0) -> str:
-    """To'liq quvur: xom post -> AvtoPost brendidagi tayyor matn.
+def brandify(raw: str, pattern: dict | None = None, channel: str = "",
+             markup: int = 0, source: str = "") -> str:
+    """To'liq quvur: xom post -> tayyor matn.
 
-    markup>0 -> DO'KON rejimi: narx oshiriladi va to'liq matn saqlanadi (qisqartirilmaydi)."""
+    - header/footer/hashtags bo'sh bo'lsa -> chiqmaydi (professional yangilik uslubi).
+    - source berilsa -> matn oxirida "📰 Manba: {source}".
+    - markup>0 -> DO'KON rejimi: narxni oshir + to'liq matn saqla."""
     pattern = pattern or {}
     lvl = int(pattern.get("rewrite_lvl", 1) or 0)
 
@@ -177,21 +180,25 @@ def brandify(raw: str, pattern: dict | None = None, channel: str = "", markup: i
         if lvl == 0:                      # faqat tozalash rejimi
             title, body = "", t
 
-    tags = make_hashtags(t, pattern.get("hashtags", ""))
-    header = pattern.get("header", "🚀 <b>AvtoPost</b>")
+    header = pattern.get("header", "")
     footer = pattern.get("footer", "")
     if footer and channel:
         footer = footer.replace("{channel}", channel)
+    base_tags = pattern.get("hashtags", "")
 
-    parts = [header, "━━━━━━━━━━━"]
+    parts = []
+    if header:                            # bo'sh bo'lsa brend/ajratgich chiqmaydi
+        parts += [header, "━━━━━━━━━━━"]
     if title:
         parts.append(f"<b>{title}</b>")
     if body:
         parts.append(body)
+    if source:                            # manba nomi (yangilik uslubi)
+        parts.append(f"\n📰 <i>Manba: {source}</i>")
     if footer:
         parts += ["", footer]
-    if tags:
-        parts.append(tags)
+    if base_tags:                         # faqat qolipда hashtag berilgan bo'lsa
+        parts.append(make_hashtags(t, base_tags))
     return "\n".join(p for p in parts if p)[:4096]
 
 

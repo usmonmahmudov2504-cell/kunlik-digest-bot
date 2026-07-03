@@ -67,7 +67,8 @@ async def handle_job(database, job) -> None:
         c_hash = db.content_hash(it["text"])
         if db.is_duplicate(database, job["channel_id"], c_hash):
             continue
-        text = brandify(it["text"], pat, channel, markup=job["markup"])
+        text = brandify(it["text"], pat, channel, markup=job["markup"],
+                        source=it.get("source_name", ""))
         ok = await publisher.send(channel, text)
         if ok:
             db.mark_posted(database, job["channel_id"], it.get("source_id"),
