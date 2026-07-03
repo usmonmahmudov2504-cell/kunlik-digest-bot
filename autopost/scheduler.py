@@ -64,10 +64,13 @@ async def handle_job(database, job) -> None:
     for it in items:
         if posted >= MAX_PER_TICK:
             break
-        c_hash = db.content_hash(it["text"])
+        c_hash = db.content_hash(it["text"])   # dedup asl (tarjimasiz) matn bo'yicha
         if db.is_duplicate(database, job["channel_id"], c_hash):
             continue
-        text = brandify(it["text"], pat, channel, markup=job["markup"],
+        src_text = it["text"]
+        if it.get("translate"):                # xalqaro manba -> o'zbekchaga (bepul Google)
+            src_text = await asyncio.to_thread(scraper._translate_uz, it["text"])
+        text = brandify(src_text, pat, channel, markup=job["markup"],
                         source=it.get("source_name", ""))
         ok = await publisher.send(channel, text)
         if ok:

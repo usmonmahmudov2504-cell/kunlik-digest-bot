@@ -26,11 +26,13 @@ def init_db() -> None:
         sql = f.read()
     db = connect()
     db.executescript(sql)
-    # Migratsiya: eski box.db'da markup ustuni bo'lmasligi mumkin -> qo'shamiz
-    try:
-        db.execute("ALTER TABLE channels ADD COLUMN markup INTEGER DEFAULT 0")
-    except Exception:
-        pass
+    # Migratsiya: eski box.db'da yangi ustunlar bo'lmasligi mumkin -> qo'shamiz
+    for sql in ("ALTER TABLE channels ADD COLUMN markup INTEGER DEFAULT 0",
+                "ALTER TABLE sources ADD COLUMN translate INTEGER DEFAULT 0"):
+        try:
+            db.execute(sql)
+        except Exception:
+            pass
     db.commit()
     db.close()
 

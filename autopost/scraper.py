@@ -18,13 +18,13 @@ PER_SOURCE = 5            # har manbadan ko'pi bilan nechta so'nggi xabar tekshi
 
 _client = None            # bitta sessiyani qayta ishlatamiz
 
-# Manba nomlari (post oxirida "Manba: ..." uchun chiroyli ko'rsatish).
+# Manba nomlari: hostdagi KALIT so'z -> chiroyli nom (post oxiridagi "Manba: ..." uchun).
 _SRC_NAMES = {
-    "gazeta.uz": "Gazeta.uz", "kun.uz": "Kun.uz", "daryo.uz": "Daryo",
-    "spot.uz": "Spot.uz", "bbc.co": "BBC", "bbc.com": "BBC", "reuters.com": "Reuters",
-    "apnews.com": "AP", "cnn.com": "CNN", "techcrunch.com": "TechCrunch",
-    "nationalgeographic.com": "National Geographic", "aljazeera.com": "Al Jazeera",
-    "theverge.com": "The Verge", "euronews.com": "Euronews",
+    "gazeta": "Gazeta.uz", "kun.uz": "Kun.uz", "daryo": "Daryo", "spot": "Spot.uz",
+    "bbc": "BBC", "reuters": "Reuters", "apnews": "AP", "cnn": "CNN",
+    "techcrunch": "TechCrunch", "nationalgeographic": "National Geographic",
+    "natgeo": "National Geographic", "aljazeera": "Al Jazeera", "theverge": "The Verge",
+    "euronews": "Euronews", "nytimes": "NY Times", "guardian": "The Guardian",
 }
 
 
@@ -33,11 +33,30 @@ def _src_name(ref: str) -> str:
     if ref.startswith("@"):
         return ref
     m = re.search(r"https?://([^/]+)", ref)
-    host = (m.group(1) if m else ref).lower().replace("www.", "")
-    for dom, name in _SRC_NAMES.items():
-        if dom in host:
+    host = (m.group(1) if m else ref).lower()
+    host = re.sub(r"^(feeds?|rss|www)\.", "", host)      # feeds.bbci.co.uk -> bbci.co.uk
+    for key, name in _SRC_NAMES.items():
+        if key in host:
             return name
     return host.split(".")[0].capitalize() if host else "Manba"
+
+
+def _translate_uz(text: str) -> str:
+    """Bepul Google Translate (kalitsiz) -> o'zbekcha. Xato -> asl matn."""
+    import urllib.request, urllib.parse, json
+    if not text or not text.strip():
+        return text
+    try:
+        q = urllib.parse.quote(text[:4500])
+        url = ("https://translate.googleapis.com/translate_a/single"
+               f"?client=gtx&sl=auto&tl=uz&dt=t&q={q}")
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return "".join(seg[0] for seg in data[0] if seg and seg[0]).strip() or text
+    except Exception as e:
+        print("  Tarjima xato:", e)
+        return text
 
 
 async def _get_client():
@@ -66,7 +85,7 @@ def _passes(text: str, keywords: str) -> bool:
     return any(k in low for k in kws)
 
 
-async def _fetch_tg(client, ref: str, keywords: str, source_id: int) -> list[dict]:
+async def _fetch_tg(client, ref: str, keywords: str, source_id: int, translate: int = 0) -> list[dict]:
     out = []
     name = _src_name(ref)
     try:
@@ -74,13 +93,13 @@ async def _fetch_tg(client, ref: str, keywords: str, source_id: int) -> list[dic
             txt = msg.message or ""
             if len(txt) >= 40 and _passes(txt, keywords):
                 out.append({"text": txt, "msg_id": msg.id, "source_id": source_id,
-                            "source_name": name})
+                            "source_name": name, "translate": translate})
     except Exception as e:
         print(f"  Manba o'qishda xato ({ref}): {e}")
     return out
 
 
-def _fetch_rss(ref: str, keywords: str, source_id: int) -> list[dict]:
+def _fetch_rss(ref: str, keywords: str, source_id: int, translate: int = 0) -> list[dict]:
     try:
         import feedparser
     except Exception:
@@ -92,8 +111,15 @@ def _fetch_rss(ref: str, keywords: str, source_id: int) -> list[dict]:
         txt = (e.get("title", "") + "\n" + e.get("summary", "")).strip()
         if len(txt) >= 40 and _passes(txt, keywords):
             out.append({"text": txt, "msg_id": None, "source_id": source_id,
-                        "source_name": name})
+                        "source_name": name, "translate": translate})
     return out
+
+
+def _tr_flag(s) -> int:
+    try:
+        return int(s["translate"] or 0)
+    except Exception:
+        return 0
 
 
 async def fetch_for_channel(database, channel_id: int) -> list[dict]:
@@ -104,10 +130,11 @@ async def fetch_for_channel(database, channel_id: int) -> list[dict]:
     items: list[dict] = []
     client = None
     for s in srcs:
+        tr = _tr_flag(s)
         if s["kind"] == "rss":
-            items += _fetch_rss(s["ref"], s["keywords"], s["id"])
+            items += _fetch_rss(s["ref"], s["keywords"], s["id"], tr)
         else:
             client = client or await _get_client()
             if client:
-                items += await _fetch_tg(client, s["ref"], s["keywords"], s["id"])
+                items += await _fetch_tg(client, s["ref"], s["keywords"], s["id"], tr)
     return items
