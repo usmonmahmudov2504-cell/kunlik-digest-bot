@@ -72,7 +72,13 @@ async def handle_job(database, job) -> None:
             src_text = await asyncio.to_thread(scraper._translate_uz, it["text"])
         text = brandify(src_text, pat, channel, markup=job["markup"],
                         source=it.get("source_name", ""))
-        ok = await publisher.send(channel, text)
+        img = it.get("image")
+        if not img and it.get("link"):     # RSS'da rasm yo'q -> maqoladan og:image
+            img = await asyncio.to_thread(scraper._og_image, it["link"])
+        if img:                            # rasm bo'lsa -> photo + caption
+            ok = await publisher.send_photo(channel, img, text)
+        else:
+            ok = await publisher.send(channel, text)
         if ok:
             db.mark_posted(database, job["channel_id"], it.get("source_id"),
                            it.get("msg_id"), c_hash)

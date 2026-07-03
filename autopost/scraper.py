@@ -41,6 +41,41 @@ def _src_name(ref: str) -> str:
     return host.split(".")[0].capitalize() if host else "Manba"
 
 
+def _entry_image(e) -> str:
+    """RSS yozuvidan rasm URL (media/enclosure/<img>). Topilmasa bo'sh."""
+    url = ""
+    for key in ("media_content", "media_thumbnail"):
+        media = e.get(key)
+        if media and isinstance(media, list) and media[0].get("url"):
+            url = media[0]["url"]; break
+    if not url:
+        for l in e.get("links", []):
+            if l.get("rel") == "enclosure" and "image" in (l.get("type") or ""):
+                url = l.get("href", ""); break
+    if not url:
+        m = re.search(r'<img[^>]+src=["\']([^"\']+)', e.get("summary", "") or "")
+        url = m.group(1) if m else ""
+    if url and "ichef.bbci" in url:              # BBC kichik -> katta o'lcham
+        url = re.sub(r"/(?:standard|news)/\d+/", "/standard/976/", url)
+    return url
+
+
+def _og_image(url: str) -> str:
+    """Maqola sahifasidan og:image (RSS'da rasm bo'lmasa). Xato -> bo'sh."""
+    import urllib.request
+    if not url:
+        return ""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            html = r.read(200000).decode("utf-8", "ignore")
+        m = (re.search(r'property=["\']og:image["\'][^>]*content=["\']([^"\']+)', html, re.I)
+             or re.search(r'content=["\']([^"\']+)["\'][^>]*property=["\']og:image', html, re.I))
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+
 def _translate_uz(text: str) -> str:
     """Bepul Google Translate (kalitsiz) -> o'zbekcha. Xato -> asl matn."""
     import urllib.request, urllib.parse, json
@@ -111,7 +146,8 @@ def _fetch_rss(ref: str, keywords: str, source_id: int, translate: int = 0) -> l
         txt = (e.get("title", "") + "\n" + e.get("summary", "")).strip()
         if len(txt) >= 40 and _passes(txt, keywords):
             out.append({"text": txt, "msg_id": None, "source_id": source_id,
-                        "source_name": name, "translate": translate})
+                        "source_name": name, "translate": translate,
+                        "image": _entry_image(e), "link": e.get("link", "")})
     return out
 
 
