@@ -1236,10 +1236,10 @@ def _channel_footer() -> str:
     # Ko'rinadigan matn = chiroyli kanal nomi; havola esa o'sha kanalga (o'zgarmaydi).
     label = html.escape(CHANNEL_NAME or ch, quote=False)
     link = f'<a href="https://t.me/{uname}">{label}</a>'
+    # Tepadagi ortiqcha havola olib tashlandi -> faqat xizmat qatori + pastda bitta kanal havolasi.
     return ("\n\n" + _DIV +
-            f"\n{link}"
             f"\n{FOOTER_SERVICES}"
-            f"\n🔔 @{uname}")
+            f"\n{link}")
 
 
 def _append_footer(text: str) -> str:
