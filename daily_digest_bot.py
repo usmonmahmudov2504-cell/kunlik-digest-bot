@@ -1226,9 +1226,11 @@ _DIV = "━━━━━━━━━━━━━━"
 
 
 def _channel_footer() -> str:
-    """Har post tagidagi DOIMIY (bir xil) premium brend footeri: kanal nomi + xizmat + handle.
+    """Har post tagidagi DOIMIY (bir xil) premium brend footeri: kanal nomi + xizmat.
 
-    Brend DINAMIK -> har kanal o'z nomini oladi (mas. Dollar Kursi -> @DollarKursis)."""
+    Brend DINAMIK -> har kanal o'z nomini oladi (mas. Dollar Kursi -> @DollarKursis).
+    Faqat BITTA havola bo'lsin -> pastda alohida "@handle" qatori qo'shilmaydi
+    (kanal nomining o'zi allaqachon shu kanalga havola)."""
     ch = str(TELEGRAM_CHANNEL).strip()
     if not ch.startswith("@"):
         return ""
@@ -1238,8 +1240,7 @@ def _channel_footer() -> str:
     link = f'<a href="https://t.me/{uname}">{label}</a>'
     return ("\n\n" + _DIV +
             f"\n{link}"
-            f"\n{FOOTER_SERVICES}"
-            f"\n🔔 @{uname}")
+            f"\n{FOOTER_SERVICES}")
 
 
 def _append_footer(text: str) -> str:
@@ -1288,10 +1289,16 @@ def _tags(key, extra=None) -> str:
 
 
 def weather_caption(date_label, weather) -> str:
-    """Ob-havo posti (Template 3): premium minimal matn \u2014 viloyat \u00b7 harorat."""
+    """Ob-havo posti \u2014 tree-uslubidagi dizayn (rasm namunasiga mos): viloyat \u00b7 harorat."""
+    dia = ["\U0001F537", "\U0001F536"]              # \ud83d\udd37 \ud83d\udd36 navbatma-navbat
     parts = ["\U0001F326\ufe0f <b>Bugungi ob-havo</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
-    for region, (temp, desc) in weather.items():
-        parts.append(f"{_wx_emoji(desc)} {region} \u2014 <b>{round(temp)}\u00b0</b>")
+    regions = list(weather.items())
+    n = len(regions)
+    for i, (region, (temp, desc)) in enumerate(regions):
+        branch = "\u2514\u2500" if i == n - 1 else "\u251c\u2500"    # \u2514\u2500 / \u251c\u2500
+        bar = "  " if i == n - 1 else "\u2502 "                      # \u2502
+        parts.append(f"{branch} {_wx_emoji(desc)} {dia[i % 2]} <b>{region}</b>")
+        parts.append(f"{bar} {round(temp)}\u00b0")
     parts += ["", _DIV, "", "\u2600\ufe0f Hammaga unumli kun!", "",
               "\U0001F4CC Manba: Open-Meteo", "", _tags("weather")]
     return _finish(parts)
@@ -1351,16 +1358,21 @@ def breaking_caption(item) -> str:
 
 
 def currency_overview_caption(date_label, rows) -> str:
-    """4-post: umumiy valyuta kurslari caption."""
+    """4-post: umumiy valyuta kurslari caption \u2014 tree-uslubidagi dizayn (rasm namunasiga mos)."""
     flags = {"USD": "\U0001F1FA\U0001F1F8", "EUR": "\U0001F1EA\U0001F1FA",
              "GBP": "\U0001F1EC\U0001F1E7", "RUB": "\U0001F1F7\U0001F1FA",
              "KZT": "\U0001F1F0\U0001F1FF", "CNY": "\U0001F1E8\U0001F1F3",
              "JPY": "\U0001F1EF\U0001F1F5", "TRY": "\U0001F1F9\U0001F1F7",
              "AED": "\U0001F1E6\U0001F1EA", "KRW": "\U0001F1F0\U0001F1F7"}
+    dia = ["\U0001F537", "\U0001F536"]              # \ud83d\udd37 \ud83d\udd36 navbatma-navbat
     parts = ["\U0001F4B1 <b>Valyuta kurslari</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
-    for r in rows:
+    n = len(rows)
+    for i, r in enumerate(rows):
         u = f" ({r['unit']})" if str(r.get("unit")) not in ("1", "", "None") else ""
-        parts.append(f"{flags.get(r['code'], '')} <b>{r['code']}</b>{u} \u2014 {r['rate']}")
+        branch = "\u2514\u2500" if i == n - 1 else "\u251c\u2500"
+        bar = "  " if i == n - 1 else "\u2502 "
+        parts.append(f"{branch} {flags.get(r['code'], '')} {dia[i % 2]} <b>{r['code']}</b>{u}")
+        parts.append(f"{bar} {r['rate']}")
     parts += ["", _DIV, "", "\U0001F3DB Markaziy bank kursi", "",
               "\U0001F4CC Manba: cbu.uz", "", _tags("rates")]
     return _finish(parts)
@@ -2114,12 +2126,13 @@ def run_channel(now, date_label, group, cfg) -> list:
             nd = {"date": today, "count": 0, "last_ts": 0}
         # Postlar kun bo'yi TEKIS taqsimlansin: tunda (NEWS_ACTIVE oynasidan tashqarida)
         # to'plangan orqada qolgan xabarlar oyna ochilishi bilan BIRDANIGA burst
-        # bo'lib chiqmasin -> har post orasida minimal oraliq talab qilinadi (kunlik
-        # limitni faol soatlar bo'yicha teng bo'lib chiqadi).
-        active_span_min = (NEWS_ACTIVE[1] - NEWS_ACTIVE[0]) * 60
-        min_gap_min = cfg.get("news_min_gap_min")
-        if min_gap_min is None and cap:
-            min_gap_min = active_span_min / int(cap) * 0.8   # bir oz zaxira bilan
+        # bo'lib chiqmasin -> har post orasida minimal oraliq talab qilinadi.
+        # MUHIM: butun faol oynani (16 soat) kunlik cap'ga bo'lib tashlamaymiz -- unda
+        # oraliq juda katta (~2 soat+) bo'lib, kanal "o'lik" ko'rinardi. O'rniga past,
+        # FIKS oraliq (heartbeat 15 daq'dan sezilarli katta -> burst bo'lmaydi, lekin
+        # kanal kun bo'yi tabiiy faol ko'rinadi); cap baribir umumiy sonni cheklaydi.
+        DEFAULT_NEWS_GAP_MIN = 45
+        min_gap_min = cfg.get("news_min_gap_min", DEFAULT_NEWS_GAP_MIN)
         elapsed_min = (now.timestamp() - nd.get("last_ts", 0)) / 60.0
         if min_gap_min and nd.get("last_ts") and elapsed_min < min_gap_min:
             print(f"C guruh: navbatdagi post ~{min_gap_min - elapsed_min:.0f} daq keyin "
