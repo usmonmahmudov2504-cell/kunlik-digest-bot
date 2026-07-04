@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS sources (
   id          INTEGER PRIMARY KEY,
   kind        TEXT DEFAULT 'tg',       -- tg / rss
   ref         TEXT NOT NULL,           -- @manba yoki RSS url
+  translate   INTEGER DEFAULT 0,       -- 1 -> o'zbekchaga tarjima (xalqaro manbalar)
   is_active   INTEGER DEFAULT 1
 );
 

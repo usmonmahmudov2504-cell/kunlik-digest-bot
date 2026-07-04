@@ -44,3 +44,27 @@ async def send(chat: str, text: str, disable_preview: bool = True) -> bool:
     except Exception as e:
         print(f"  [{chat}] yuborish xato: {e}")
         return False
+
+
+async def send_photo(chat: str, photo_url: str, caption: str) -> bool:
+    """Rasm + caption (sendPhoto). Rasm xato bo'lsa -> matnli postga qaytadi."""
+    if not BOT_TOKEN:
+        print(f"  [{chat}] (token yo'q) rasm+preview:\n{caption[:160]}")
+        return False
+    try:
+        import aiohttp
+    except Exception:
+        return await send(chat, caption)
+    data = {"chat_id": chat, "photo": photo_url, "caption": caption[:1024],
+            "parse_mode": "HTML"}
+    url = API.format(token=BOT_TOKEN, method="sendPhoto")
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(url, data=data, timeout=40) as r:
+                if r.status == 200:
+                    return True
+                body = await r.text()
+                print(f"  [{chat}] sendPhoto {r.status}: {body[:140]} -> matnga qaytamiz")
+    except Exception as e:
+        print(f"  [{chat}] rasm xato: {e} -> matnga qaytamiz")
+    return await send(chat, caption)      # rasm bo'lmasa/xato -> oddiy matn

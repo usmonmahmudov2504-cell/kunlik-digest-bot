@@ -98,7 +98,7 @@
     "blog_image": false,
     "voice": "blog",
     "voice_persona": "kitoblarni ko'p o'qigan, ziyoli va samimiy bloger",
-    "voice_focus": "Mavzu — biznes va psixologiya kitoblari, kuchli iqtiboslar, xulosalar va esda qoladigan fikrlar. Har postda bitta aniq, amaliy va esda qoladigan g'oya ber. Iloji bo'lsa mashhur kitob, muallif yoki tadqiqotga ishora qil, lekin sodda, hayotiy va o'zbekona tushuntir. Quruq nasihatdan qoch — fikrni real hayotga bog'la.",
+    "voice_focus": "Mavzu — biznes, shaxsiy rivojlanish va psixologiya kitoblari; kuchli iqtiboslar, bilim xulosalari va esda qoladigan fikrlar. Har postda bitta aniq, amaliy va esda qoladigan g'oya yoki iqtibos ber va uni qisqa, chuqur xulosa bilan sharhla. Iloji bo'lsa mashhur kitob, muallif yoki tadqiqotga ishora qil, lekin sodda, hayotiy va o'zbekona tushuntir. Quruq nasihatdan qoch — fikrni real hayotga bog'la.",
     "blog_themes": [
       "mashhur biznes kitobidan asosiy saboq va uni hayotga tatbiq etish",
       "psixologiya: inson xulqi va qaror qabul qilish haqida tushuncha",
@@ -111,7 +111,12 @@
       "his-tuyg'ularni boshqarish va ichki muvozanat",
       "munosabatlar, muloqot va inson tabiati",
       "pul, qadriyat va boylik haqida ong",
-      "vaqt, e'tibor va hayot mazmuni haqida mulohaza"
+      "vaqt, e'tibor va hayot mazmuni haqida mulohaza",
+      "biznes kitobidan amaliy bilim xulosasi (asosiy 3-4 nuqta)",
+      "shaxsiy rivojlanish kitobidan bitta o'zgartiruvchi g'oya va uni bugun qo'llash",
+      "mashhur muallif iqtibosi va uning biznes hamda hayotga aloqasi",
+      "muvaffaqiyatli tadbirkorlar odati va tafakkuridan saboq",
+      "kitobdan olingan kuchli iqtibos + qisqa, chuqur bilim xulosasi"
     ],
     "footer_services": "📚 Kitoblar · 🧠 Psixologiya · ✍️ Iqtiboslar"
   },
