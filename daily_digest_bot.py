@@ -526,6 +526,38 @@ def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
     return None
 
 
+# Blog matni boshidagi "Salom, azizlarim! 👋" kabi murojaatni ushlaydigan naqsh.
+# Faqat kuchli salomlashuv so'zlaridan boshlansa oladi (noto'g'ri kesish xavfi past).
+_GREETING = re.compile(
+    r"^\s*(?:assalomu?\s*alaykum|salom|xayrli\s+(?:tong|kun|kech)|"
+    r"aziz(?:lar|larim)|hurmatli\s+\w+)\b[^.!?\n]*[.!?\n]+"
+    r"[\s\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\U0000FE0F]*",
+    re.IGNORECASE)
+
+
+def _strip_greeting(text: str) -> str:
+    """Blog matni boshidagi 'Salom, azizlarim!' kabi murojaatni olib tashlaydi."""
+    if not text:
+        return text
+    return _GREETING.sub("", text, count=1).lstrip()
+
+
+def _trim_sentence(text: str, limit: int) -> str:
+    """Matnni limit ichida, lekin JUMLA oxirida tugatadi — so'z o'rtasidan kesilmaydi.
+
+    Shu tufayli post hech qachon '...oshirishni re' kabi chala tugamaydi.
+    """
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind("."), cut.rfind("!"), cut.rfind("?"), cut.rfind("…"))
+    if end >= limit * 0.5:                      # yaqin-atrofda jumla tugashi bor -> shu yerda kes
+        return cut[:end + 1].strip()
+    sp = cut.rfind(" ")                         # aks holda -> oxirgi TO'LIQ so'zda kes + "…"
+    return (cut[:sp].rstrip() if sp > 0 else cut) + "…"
+
+
 def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
             persona: str = "") -> str | None:
     """Yangilikni BATAFSIL, MA'LUMOTLI post sifatida tabiiy O'zbekchaga aylantiradi.
@@ -548,6 +580,9 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
         "kontekst. Manba sarlavhasi savol shaklida bo'lsa ham, sen JAVOBNI va FAKTLARNI yoz "
         "— faqat savol berib qo'yma, o'quvchi postning o'zidan to'liq tushunsin.\n"
         "- Tabiiy, jonli ohang; nega bu qiziq yoki muhimligini ham qisqa izohla.\n"
+        "- 'Salom', 'Assalomu alaykum', 'azizlarim', 'do'stlar', 'startaplar' kabi "
+        "MUROJAAT/SALOMLASHUV bilan BOSHLAMA — to'g'ridan-to'g'ri asosiy ma'lumotga kir.\n"
+        "- Postni TO'LIQ, tugallangan jumla bilan yakunla — yarim jumlada to'xtatma.\n"
         "- 1-2 abzas, 3-5 jumla (taxminan 60-110 so'z). Asosiy faktni ber, "
         "lekin cho'zma — qisqa va lo'nda. Juda qisqa ham, juda uzun ham emas.\n"
         "- Ko'pi bilan 2-3 mos emoji ishlat, ortiqcha emas.\n"
@@ -566,7 +601,9 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
         return None
     out = out.strip().strip('"').strip()
     out = out.replace("**", "").replace("__", "").replace("*", "")
-    return out[:850] or None       # to'liqroq, lekin Telegram rasm-caption limiti (1024) ichida xavfsiz
+    out = _strip_greeting(out)                 # "Salom, azizlarim!" murojaatini olib tashla
+    # Jumla oxirida kes (so'z o'rtasidan emas); footer uchun joy qoldiramiz (caption limiti 1024)
+    return _trim_sentence(out, 920) or None
 
 
 def _article_text(link: str, max_paras: int = 12, max_chars: int = 3500) -> str:
@@ -1852,6 +1889,8 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             "Shaxsiy QARASH/fikr ('menimcha') mumkin, lekin soxta voqeani haqiqatdek ko'rsatma. "
             "Kitob, muallif yoki iqtibosga ishora qilsang \u2014 faqat ROSTDAN aniq bilganingni yoz; "
             "ishonching komil bo'lmasa, umumiy fikr bilan cheklan, nom to'qima.\n"
+            "- 'Salom', 'Assalomu alaykum', 'azizlarim', 'do'stlar' kabi MUROJAAT/SALOMLASHUV "
+            "bilan BOSHLAMA — to'g'ridan-to'g'ri mavzuning o'ziga kir.\n"
             "- Kuchli birinchi jumla bilan boshla; oxirida kichik xulosa yoki o'ylantiruvchi savol qoldir.\n"
             f"- {lo}-{hi} so'z. Faqat oddiy matn \u2014 HTML, markdown yoki yulduzcha (*) ishlatma.\n"
             "- 1-3 ta mos emoji bo'lsa bo'ladi, ortiqcha emas.\n"
@@ -1864,13 +1903,14 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             print("Original blog: LLM javob bermadi (Gemini/Claude).")
             return False
         text = text.strip().strip('"').replace("**", "").replace("__", "").replace("*", "").strip()
+        text = _strip_greeting(text)           # "Salom, azizlarim!" murojaatini olib tashla
         ch = str(TELEGRAM_CHANNEL).strip()
         label = CHANNEL_NAME or ch
         posted = False
         if ibora_phrase:
             try:
                 img = render_ibora_card(ibora_phrase, ibora_gloss or "", "p_blog.png", label)
-                body = html.escape(text[:850], quote=False)   # sendPhoto caption limiti (1024) ichida xavfsiz
+                body = html.escape(_trim_sentence(text, 850), quote=False)   # caption limiti (1024) ichida, jumla oxirida
                 if ch.startswith("@"):
                     body += (f"\n\n— <a href=\"https://t.me/{ch[1:]}\">"
                              f"{html.escape(label, quote=False)}</a>")
@@ -1894,7 +1934,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             except Exception as e:
                 print(f"Blog karta xato (matnga qaytamiz): {e}")
         if not posted:
-            body = html.escape(text[:1600], quote=False)
+            body = html.escape(_trim_sentence(text, 1600), quote=False)
             if ch.startswith("@"):
                 body += (f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">"
                          f"{html.escape(label, quote=False)}</a>")
