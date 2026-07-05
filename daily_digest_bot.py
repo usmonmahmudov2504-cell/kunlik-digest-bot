@@ -2400,10 +2400,13 @@ def main() -> None:
             print(f"Kanal {cfg.get('channel')} XATO: {e}")
 
     ok = sum(results)
-    print(f"\nGuruh: {group} | Jami natija: {ok}/{len(results)} post yuborildi.")
-    if results and ok < len(results):
-        import sys
-        sys.exit(1)
+    fail = len(results) - ok
+    print(f"\nGuruh: {group} | {ok} post ✓ · {fail} xato ({len(results)} urinish).")
+    # MUHIM: workflow'ni HECH QACHON QIZIL qilmaymiz (exit 0). Ba'zi postlar (blog/AI)
+    # LLM (Gemini kvota / Claude kredit) tugagani uchun yiqilishi mumkin -> rasm-postlar
+    # baribir chiqaveradi va har run'da "Run failed" email kelmasin. Xatolar log'da ko'rinadi.
+    if fail:
+        print("Eslatma: ba'zi postlar chiqmadi (odatda LLM tugagani sababli). Log'ni ko'ring.")
 
 
 if __name__ == "__main__":
