@@ -1495,26 +1495,46 @@ def currency_caption(date_label, banks, extra_rates=None) -> str:
 
 
 _MKT_EMOJI = {"oltin": "\U0001F947", "gold": "\U0001F947", "bitcoin": "\u20bf", "btc": "\u20bf",
-              "ethereum": "\u039e", "eth": "\u039e", "bnb": "\U0001FA99", "solana": "\u25ce",
-              "sol": "\u25ce", "xrp": "\U0001F48E"}
+              "ethereum": "\u039e", "eth": "\u039e", "toncoin": "\U0001F536", "ton": "\U0001F536",
+              "bnb": "\U0001FA99", "solana": "\u25ce", "sol": "\u25ce", "xrp": "\U0001F48E"}
 
 
 def market_caption(date_label, rows) -> str:
-    """Jahon bozori posti (Template 4): har aktiv \u2014 nom + narx + o'zgarish."""
-    parts = ["\U0001F4C8 <b>Jahon bozori</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
+    """Jahon bozori posti (Template 4): har aktiv \u2014 nom + ticker + narx + o'zgarish + kontekst."""
+    parts = ["\U0001F4C8 <b>Jahon bozori</b>", f"\U0001F4C5 {date_label}", "", _DIV, "",
+             "<i>Asosiy aktivlar narxi va so'nggi 24 soatdagi o'zgarishi.</i>", ""]
     for r in rows:
         key = str(r["name"]).lower()
         em = next((v for k, v in _MKT_EMOJI.items() if k in key), "\U0001F538")
+        head = f"{em} <b>{r['name']}</b>"
+        sub = (r.get("sub") or "").strip()
+        if sub and r.get("kind") != "gold":       # coin -> ticker nom yoniga (mas. \u00b7 BTC)
+            head += f" \u00b7 {sub}"
         val = str(r["value"])
         if r.get("chg") is not None:
             arrow = "\u25b2" if r["chg"] >= 0 else "\u25bc"
             val += f"  {arrow}{abs(r['chg']):.2f}%"
-        parts.append(f"{em} <b>{r['name']}</b>")
+        parts.append(head)
         parts.append(val)
+        if r.get("kind") == "gold" and sub:       # oltin -> so'mdagi gramm narxi (mahalliy foyda)
+            parts.append(f"<i>{sub}</i>")
         parts.append("")
     if parts and parts[-1] == "":
         parts.pop()
-    parts += ["", _DIV, "", "Narxlar USD bo'yicha.", "",
+    # Kunning eng ko'p o'sgan / tushgan aktivi (faqat real o'zgarish qiymatidan)
+    moved = [r for r in rows if r.get("chg") is not None]
+    summary = []
+    if moved:
+        up = max(moved, key=lambda r: r["chg"])
+        dn = min(moved, key=lambda r: r["chg"])
+        if up["chg"] > 0:
+            summary.append(f"\U0001F4C8 Eng ko'p o'sgan: <b>{up['name']}</b> \u25b2{up['chg']:.2f}%")
+        if dn["chg"] < 0:
+            summary.append(f"\U0001F4C9 Eng ko'p tushgan: <b>{dn['name']}</b> \u25bc{abs(dn['chg']):.2f}%")
+    parts += ["", _DIV, ""]
+    if summary:
+        parts += summary + [""]
+    parts += ["<i>Narxlar jahon bozori bo'yicha (USD).</i>", "",
               "\U0001F4CC Manba: GoldAPI \u00b7 CoinGecko", "", _tags("market")]
     return _finish(parts)
 
