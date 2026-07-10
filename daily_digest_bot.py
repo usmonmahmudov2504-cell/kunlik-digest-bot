@@ -574,19 +574,29 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
     persona = (persona or "").strip() or "zamonaviy startap, AI va texnologiya blogeri"
     focus_line = (f"- YO'NALISH (eng muhim): {focus.strip()}\n") if focus and focus.strip() else ""
     prompt = (
-        f"Sen O'zbek tilida (lotin alifbosida) yozadigan {persona}san. "
-        "Quyidagi xorijiy yangilik asosida o'z kanalingga BATAFSIL, MA'LUMOTLI post yoz. Talablar:\n"
-        "- AVVAL ASOSIY MA'LUMOTNI ber: nima/kim/qachon/qayerda, hisob, raqamlar, "
-        "kontekst. Manba sarlavhasi savol shaklida bo'lsa ham, sen JAVOBNI va FAKTLARNI yoz "
-        "— faqat savol berib qo'yma, o'quvchi postning o'zidan to'liq tushunsin.\n"
-        "- Tabiiy, jonli ohang; nega bu qiziq yoki muhimligini ham qisqa izohla.\n"
-        "- 'Salom', 'Assalomu alaykum', 'azizlarim', 'do'stlar', 'startaplar' kabi "
-        "MUROJAAT/SALOMLASHUV bilan BOSHLAMA — to'g'ridan-to'g'ri asosiy ma'lumotga kir.\n"
+        f"Sen O'zbek tilida (lotin alifbosida) yozadigan {persona}san va professional "
+        "Telegram kontent strategistisan. Quyidagi xorijiy yangilik asosida o'z kanalingga "
+        "jozibali, mobil ekranda o'qish qulay POST yoz. Talablar:\n"
+        "- 1-QATOR — SARLAVHA (Hook): mos emoji bilan boshlanadigan, **qalin** "
+        "sarlavha; matndagi eng qiziqarli/qimmatli/hayratlanarli faktni 10 so'zdan "
+        "kamida qamrab ol. Masalan: '🚀 **Milliarder investordan 3 ta oltin qoida**'.\n"
+        "- Sarlavhadan keyin BO'SH QATOR, keyin asosiy matn: nima/kim/qachon/qayerda, "
+        "hisob, raqamlar, kontekst. Manba sarlavhasi savol shaklida bo'lsa ham, JAVOBNI "
+        "va FAKTLARNI yoz — o'quvchi postning o'zidan to'liq tushunsin.\n"
+        "- ABZASLAR QISQA bo'lsin: har abzasda 2-3 jumladan oshmasin, abzaslar orasida "
+        "bo'sh qator qoldir — uzun, zich matn blokidan qoch.\n"
+        "- Eng muhim raqam, kompaniya/ism yoki xulosani **qalin** qilib ajrat (masalan "
+        "**500 million dollar**, **Charlz Hadson**) — ko'zga tashlanadigan qil.\n"
+        "- Ro'yxat/bir nechta band bo'lsa, • belgili qatorlarga bo'l.\n"
+        "- 'Bugun sizlarga ... gapirib bermoqchiman', 'Bugun bizda ajoyib yangilik bor', "
+        "'Salom', 'Assalomu alaykum', 'azizlarim', 'do'stlar' kabi UMUMIY, ARXAIK yoki "
+        "MUROJAAT/SALOMLASHUV jumlalar bilan BOSHLAMA — sarlavhadan keyin to'g'ridan-to'g'ri "
+        "asosiy ma'lumotga kir.\n"
         "- Postni TO'LIQ, tugallangan jumla bilan yakunla — yarim jumlada to'xtatma.\n"
-        "- 1-2 abzas, 3-5 jumla (taxminan 60-110 so'z). Asosiy faktni ber, "
-        "lekin cho'zma — qisqa va lo'nda. Juda qisqa ham, juda uzun ham emas.\n"
-        "- Ko'pi bilan 2-3 mos emoji ishlat, ortiqcha emas.\n"
-        "- HTML, markdown, yulduzcha (*) yoki sarlavha ishlatma. Faqat oddiy matn.\n"
+        "- Sarlavha + tana taxminan 70-130 so'z. Asosiy faktni ber, lekin cho'zma.\n"
+        "- Ko'pi bilan 2-3 mos emoji ishlat (sarlavhadagidan tashqari), ortiqcha emas.\n"
+        "- Qalinlik uchun FAQAT **shu tarzda** belgila (masalan **so'z**); boshqa "
+        "markdown (# sarlavha, __, `kod`) yoki xom HTML teglari ishlatma.\n"
         "- Manba nomi, havola yoki sayt nomini (techcrunch, championat va h.k.) yozma.\n"
         "- MUHIM (qat'iy): faqat manbadagi HAQIQIY ma'lumotga tayan. O'zingdan TO'QIMA "
         "voqea, soxta do'st/tanish ('bir do'stim bor'), 'menga savol berishadi' kabi yolg'on "
@@ -600,10 +610,17 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
     if not out:
         return None
     out = out.strip().strip('"').strip()
-    out = out.replace("**", "").replace("__", "").replace("*", "")
     out = _strip_greeting(out)                 # "Salom, azizlarim!" murojaatini olib tashla
-    # Jumla oxirida kes (so'z o'rtasidan emas); footer uchun joy qoldiramiz (caption limiti 1024)
-    return _trim_sentence(out, 920) or None
+    # Jumla oxirida kes (so'z o'rtasidan emas) -- BU YERDA, xom **markdown** ustida (ya'ni
+    # <b> teglariga aylantirishdan OLDIN) qilinadi, aks holda kesish yopilmagan </b>
+    # qoldirib, Telegram HTML xatosiga olib kelishi mumkin edi. Footer uchun joy qoldiramiz.
+    out = _trim_sentence(out, 920)
+    # HTML xavfsizligi: avval xom matnni escape qilamiz, SO'NG **qalin**ni <b> ga aylantiramiz
+    # (shu tartibda -> asteriks ichidagi < > & ham to'g'ri escape bo'ladi, teglar buzilmaydi).
+    out = html.escape(out, quote=False)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
+    out = out.replace("__", "").replace("*", "")   # qolgan yakka yulduzcha/pastki chiziq -> tozalash
+    return out or None
 
 
 def _article_text(link: str, max_paras: int = 12, max_chars: int = 3500) -> str:
@@ -1686,8 +1703,10 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
         body = _article_text(link) if voice == "blog" else ""   # to'liq matn -> batafsilroq
         blog = blogify(title, desc, body, focus or "", persona or "") if voice == "blog" else None
         if blog:
-            # Shaxsiy blog ovozi: AI yozgan tabiiy matn (HTML teglarsiz, xavfsiz)
-            cap = html.escape(blog, quote=False)
+            # Shaxsiy blog ovozi: blogify() o'zi xavfsiz escape qilib, <b> teglarini
+            # qo'shib qaytaradi (sarlavha/qalin matn uchun) -> bu yerda QAYTA escape qilmaymiz,
+            # aks holda <b> teglari &lt;b&gt; bo'lib ko'rinib qolardi.
+            cap = blog
         else:
             # Standart: sarlavha (+ qisqa tavsif)
             cap = f"\u26a1 <b>{html.escape(title, quote=False)}</b>"
