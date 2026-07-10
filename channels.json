@@ -106,8 +106,9 @@
     "slots": {"O": [10.0, 19.0]},
     "blog_image": false,
     "voice": "blog",
+    "blog_words": [35, 65],
     "voice_persona": "kitoblarni ko'p o'qigan, ziyoli va samimiy bloger",
-    "voice_focus": "Mavzu — biznes, shaxsiy rivojlanish va psixologiya kitoblari; kuchli iqtiboslar, bilim xulosalari va esda qoladigan fikrlar. Har postda bitta aniq, amaliy va esda qoladigan g'oya yoki iqtibos ber va uni qisqa, chuqur xulosa bilan sharhla. Iloji bo'lsa mashhur kitob, muallif yoki tadqiqotga ishora qil, lekin sodda, hayotiy va o'zbekona tushuntir. Quruq nasihatdan qoch — fikrni real hayotga bog'la.",
+    "voice_focus": "QISQA yoz — odatdagidan ancha qisqaroq (35-65 so'z) — lekin HAR BIR SO'Z ma'noga to'la bo'lsin, 'ichi g'ich-g'ich' chuqur bo'lsin; bo'sh, umumiy, cho'zma gap YO'Q. TUZILMA (qat'iy): (1) AVVAL kuchli, aniq IQTIBOS bilan boshla — kitobdan (muallif ismi bilan) YOKI islom olimi/mutafakkir so'zidan/hikmatidan; (2) so'ng bor-yo'g'i 1-2 jumlada uning chuqur ma'nosini och; (3) oxirida hayotga bog'lovchi bitta lo'nda, kuchli xulosa yoki o'ylantiruvchi savol bilan yakunla. Iqtibos MANBASI (kitob/muallif yoki olim nomi) doim ko'rsatilsin, lekin faqat ROSTDAN aniq va ishonchli bilganingni yoz — muallif ismini, kitob nomini yoki so'zni HECH QACHON to'qima. Oyat/hadisni so'zma-so'z keltirishda alohida ehtiyot bo'l: faqat mazmuni aniq va keng tanilgan bo'lsa keltir (masalan mashhur hikmatlar), aks holda aniq oyat/hadis raqami yoki so'zma-so'z matn o'rniga umumiy islomiy hikmat/odob haqida yoz. Ortiqcha so'z, tavtologiya, umumiy nasihat qat'iyan yo'q.",
     "blog_themes": [
       "mashhur biznes kitobidan asosiy saboq va uni hayotga tatbiq etish",
       "psixologiya: inson xulqi va qaror qabul qilish haqida tushuncha",
@@ -125,7 +126,10 @@
       "shaxsiy rivojlanish kitobidan bitta o'zgartiruvchi g'oya va uni bugun qo'llash",
       "mashhur muallif iqtibosi va uning biznes hamda hayotga aloqasi",
       "muvaffaqiyatli tadbirkorlar odati va tafakkuridan saboq",
-      "kitobdan olingan kuchli iqtibos + qisqa, chuqur bilim xulosasi"
+      "kitobdan olingan kuchli iqtibos + qisqa, chuqur bilim xulosasi",
+      "islom olimi yoki mutafakkirning hikmatli so'zi va uning zamonaviy hayotga aloqasi",
+      "islomiy odob-axloq haqidagi hikmat va uni kundalik hayotga tatbiq etish",
+      "sabr, shukr yoki tavakkul haqidagi islomiy hikmat va hayotiy sharhi"
     ],
     "footer_services": "📚 Kitoblar · 🧠 Psixologiya · ✍️ Iqtiboslar"
   },
