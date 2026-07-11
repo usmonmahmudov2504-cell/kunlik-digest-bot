@@ -1292,10 +1292,8 @@ def _channel_footer() -> str:
     # Ko'rinadigan matn = chiroyli kanal nomi; havola esa o'sha kanalga (o'zgarmaydi).
     label = html.escape(CHANNEL_NAME or ch, quote=False)
     link = f'<a href="https://t.me/{uname}">{label}</a>'
-    # Tepadagi ortiqcha havola olib tashlandi -> faqat xizmat qatori + pastda bitta kanal havolasi.
-    return ("\n\n" + _DIV +
-            f"\n{FOOTER_SERVICES}"
-            f"\n{link}")
+    # Ixcham: xizmat + kanal havolasi BITTA qatorda (ikkita alohida qator emas).
+    return f"\n\n{_DIV}\n{FOOTER_SERVICES} · {link}"
 
 
 def _append_footer(text: str) -> str:
@@ -1344,16 +1342,10 @@ def _tags(key, extra=None) -> str:
 
 
 def weather_caption(date_label, weather) -> str:
-    """Ob-havo posti \u2014 tree-uslubidagi dizayn (rasm namunasiga mos): viloyat \u00b7 harorat."""
-    dia = ["\U0001F537", "\U0001F536"]              # \ud83d\udd37 \ud83d\udd36 navbatma-navbat
+    """Ob-havo posti \u2014 ixcham, bitta viloyat = bitta qator (daraxt chiziqlarsiz)."""
     parts = ["\U0001F326\ufe0f <b>Bugungi ob-havo</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
-    regions = list(weather.items())
-    n = len(regions)
-    for i, (region, (temp, desc)) in enumerate(regions):
-        branch = "\u2514\u2500" if i == n - 1 else "\u251c\u2500"    # \u2514\u2500 / \u251c\u2500
-        bar = "  " if i == n - 1 else "\u2502 "                      # \u2502
-        parts.append(f"{branch} {_wx_emoji(desc)} {dia[i % 2]} <b>{region}</b>")
-        parts.append(f"{bar} {round(temp)}\u00b0")
+    for region, (temp, desc) in weather.items():
+        parts.append(f"\U0001F4CD <b>{region}:</b> {_wx_emoji(desc)} {round(temp)}\u00b0")
     parts += ["", _DIV, "", "\u2600\ufe0f Hammaga unumli kun!", "",
               "\U0001F4CC Manba: Open-Meteo", "", _tags("weather")]
     return _finish(parts)
@@ -1413,21 +1405,16 @@ def breaking_caption(item) -> str:
 
 
 def currency_overview_caption(date_label, rows) -> str:
-    """4-post: umumiy valyuta kurslari caption \u2014 tree-uslubidagi dizayn (rasm namunasiga mos)."""
+    """4-post: umumiy valyuta kurslari caption \u2014 ixcham, bitta valyuta = bitta qator."""
     flags = {"USD": "\U0001F1FA\U0001F1F8", "EUR": "\U0001F1EA\U0001F1FA",
              "GBP": "\U0001F1EC\U0001F1E7", "RUB": "\U0001F1F7\U0001F1FA",
              "KZT": "\U0001F1F0\U0001F1FF", "CNY": "\U0001F1E8\U0001F1F3",
              "JPY": "\U0001F1EF\U0001F1F5", "TRY": "\U0001F1F9\U0001F1F7",
              "AED": "\U0001F1E6\U0001F1EA", "KRW": "\U0001F1F0\U0001F1F7"}
-    dia = ["\U0001F537", "\U0001F536"]              # \ud83d\udd37 \ud83d\udd36 navbatma-navbat
     parts = ["\U0001F4B1 <b>Valyuta kurslari</b>", f"\U0001F4C5 {date_label}", "", _DIV, ""]
-    n = len(rows)
-    for i, r in enumerate(rows):
+    for r in rows:
         u = f" ({r['unit']})" if str(r.get("unit")) not in ("1", "", "None") else ""
-        branch = "\u2514\u2500" if i == n - 1 else "\u251c\u2500"
-        bar = "  " if i == n - 1 else "\u2502 "
-        parts.append(f"{branch} {flags.get(r['code'], '')} {dia[i % 2]} <b>{r['code']}</b>{u}")
-        parts.append(f"{bar} {r['rate']}")
+        parts.append(f"{flags.get(r['code'], '')} <b>{r['code']}</b>{u} \u2014 {r['rate']}")
     parts += ["", _DIV, "", "\U0001F3DB Markaziy bank kursi", "",
               "\U0001F4CC Manba: cbu.uz", "", _tags("rates")]
     return _finish(parts)
@@ -1455,7 +1442,7 @@ VILOYATLAR = ["Toshkent", "Andijon", "Buxoro", "Farg'ona", "Jizzax", "Namangan",
 
 
 def regional_dollar_caption(date_label, banks) -> str | None:
-    """Viloyatlar bo'yicha dollar kursi — chiroyli tree-ko'rinishdagi MATNLI post.
+    """Viloyatlar bo'yicha dollar kursi — ixcham, bitta viloyat = bitta qatorli MATNLI post.
 
     Viloyat bo'yicha alohida kurs manbasi yo'q -> o'rtacha bank kursi hammaga bir xil
     (uslubiy post). Banklar bo'lmasa None."""
@@ -1468,10 +1455,8 @@ def regional_dollar_caption(date_label, banks) -> str | None:
     rate = f"{med_buy:,} / {med_sell:,}".replace(",", " ")
     parts = [f"⚡ <b>Bugungi dollar kursi</b> — {date_label}", "",
              "<i>Olish / Sotish (so'm) · o'rtacha bank kursi</i>", ""]
-    dia = ["\U0001F537", "\U0001F536"]              # 🔷 🔶 navbatma-navbat
-    for i, v in enumerate(VILOYATLAR):
-        parts.append(f"├─ {dia[i % 2]} <b>{v}</b>")
-        parts.append(f"│  {rate}")
+    for v in VILOYATLAR:
+        parts.append(f"📍 <b>{v}:</b> {rate}")
     parts.append("")
     parts.append(_tags("dollar"))
     return _finish(parts)
@@ -1492,10 +1477,12 @@ def currency_caption(date_label, banks, extra_rates=None) -> str:
     parts = ["\U0001F4B5 <b>\u0414\u043e\u043b\u043b\u0430\u0440 \u043a\u0443\u0440\u0441\u0438 | \u0420\u0430\u0441\u043c\u0438\u0439</b>", "", _DIV, ""]
 
     if sell_rate and buy_rate:
+        sell_txt = f"{sell_rate:,} \u0441\u045e\u043c".replace(",", " ")
+        buy_txt = f"{buy_rate:,} \u0441\u045e\u043c".replace(",", " ")
         parts += ["\U0001F4CA <b>\u0411\u043e\u0437\u043e\u0440 \u043a\u0443\u0440\u0441\u0438</b>", "",
-                  "\U0001F1FA\U0001F1F8 \u0414\u043e\u043b\u043b\u0430\u0440:",
-                  f"\U0001F53A \u0421\u043e\u0442\u0438\u0448: <b>{sell_rate:,} \u0441\u045e\u043c</b>".replace(",", " "),
-                  f"\U0001F53B \u041e\u043b\u0438\u0448: <b>{buy_rate:,} \u0441\u045e\u043c</b>".replace(",", " "),
+                  f"\U0001F1FA\U0001F1F8 \u0414\u043e\u043b\u043b\u0430\u0440: "
+                  f"\U0001F53A \u0421\u043e\u0442\u0438\u0448 <b>{sell_txt}</b> \u00b7 "
+                  f"\U0001F53B \u041e\u043b\u0438\u0448 <b>{buy_txt}</b>",
                   "", _DIV, ""]
 
     parts += ["\U0001F4CB <b>\u0420\u0430\u0441\u043c\u0438\u0439 \u043a\u0443\u0440\u0441</b>", ""]
@@ -1517,7 +1504,7 @@ _MKT_EMOJI = {"oltin": "\U0001F947", "gold": "\U0001F947", "bitcoin": "\u20bf", 
 
 
 def market_caption(date_label, rows) -> str:
-    """Jahon bozori posti (Template 4): har aktiv \u2014 nom + ticker + narx + o'zgarish + kontekst."""
+    """Jahon bozori posti \u2014 ixcham, bitta aktiv = bitta qator (nom+ticker+narx+o'zgarish)."""
     parts = ["\U0001F4C8 <b>Jahon bozori</b>", f"\U0001F4C5 {date_label}", "", _DIV, "",
              "<i>Asosiy aktivlar narxi va so'nggi 24 soatdagi o'zgarishi.</i>", ""]
     for r in rows:
@@ -1530,14 +1517,11 @@ def market_caption(date_label, rows) -> str:
         val = str(r["value"])
         if r.get("chg") is not None:
             arrow = "\u25b2" if r["chg"] >= 0 else "\u25bc"
-            val += f"  {arrow}{abs(r['chg']):.2f}%"
-        parts.append(head)
-        parts.append(val)
-        if r.get("kind") == "gold" and sub:       # oltin -> so'mdagi gramm narxi (mahalliy foyda)
-            parts.append(f"<i>{sub}</i>")
-        parts.append("")
-    if parts and parts[-1] == "":
-        parts.pop()
+            val += f" {arrow}{abs(r['chg']):.2f}%"
+        line = f"{head} \u2014 {val}"
+        if r.get("kind") == "gold" and sub:        # oltin -> so'mdagi gramm narxi (mahalliy foyda)
+            line += f" <i>({sub})</i>"
+        parts.append(line)
     # Kunning eng ko'p o'sgan / tushgan aktivi (faqat real o'zgarish qiymatidan)
     moved = [r for r in rows if r.get("chg") is not None]
     summary = []
