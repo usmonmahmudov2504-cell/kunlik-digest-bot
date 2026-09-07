@@ -51,6 +51,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
           FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+          # Blog postlari uchun mavzuga mos foto (Pexels). Bo'lmasa post matn holida chiqadi.
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           # FORCE_POST faqat QO'LDA, aniq guruh tanlab test qilinganda (group != AUTO).
           # cron-job.org heartbeat'i AUTO yuboradi -> FORCE_POST BO'SH -> tungi darvoza
           # (23:00-07:00) ishlaydi va kechasi post chiqmaydi.

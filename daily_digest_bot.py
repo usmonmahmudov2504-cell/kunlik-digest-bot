@@ -1051,6 +1051,57 @@ def fetch_news_image(items: list[dict], out_path: str = "news_banner.png") -> st
     return None
 
 
+def fetch_topic_photo(theme: str, out_path: str = "topic_photo.jpg",
+                      query: str | None = None) -> str | None:
+    """Mavzuga mos professional fotoni Pexels'dan yuklab, faylga saqlaydi.
+
+    query -> kanal config'idagi tayyor INGLIZCHA so'rov (photo_queries). Eng aniq
+    natijani shu beradi: qisqa, foto-qidiruvga moslangan ibora. Berilmasa mavzuning
+    o'zi inglizchaga o'giriladi (zaxira yo'l -- natija kamroq aniq bo'lishi mumkin).
+    Gorizontal (landscape) fotolar ichidan tasodifiy bittasi olinadi -> bir xil mavzu
+    har safar bir xil rasm bermaydi.
+
+    PEXELS_API_KEY bo'lmasa yoki mos foto topilmasa -> None qaytaradi va post
+    oddiy matn holida chiqadi (bot to'xtamaydi).
+    """
+    key = os.getenv("PEXELS_API_KEY", "").strip()
+    if not key or not (query or theme):
+        return None
+    if query:
+        query_en = query.strip()
+    else:
+        base = (theme or "").split(":")[0].strip()
+        query_en = _translate_google(base, "en") or base
+    try:
+        r = requests.get(
+            "https://api.pexels.com/v1/search",
+            params={"query": query_en, "per_page": 15,
+                    "orientation": "landscape", "size": "medium"},
+            headers={"Authorization": key}, timeout=25)
+        if r.status_code != 200:
+            print(f"Pexels javob bermadi ({r.status_code}) -> post matn holida chiqadi.")
+            return None
+        photos = r.json().get("photos", [])
+        if not photos:
+            print(f"Pexels'da '{query_en}' bo'yicha foto topilmadi.")
+            return None
+        photo = random.choice(photos[:10])
+        srcs = photo.get("src") or {}
+        src_url = srcs.get("large") or srcs.get("original")
+        if not src_url:
+            return None
+        img = requests.get(src_url, headers=UA_WEB, timeout=30)
+        if img.status_code != 200 or "image" not in img.headers.get("content-type", ""):
+            return None
+        with open(out_path, "wb") as f:
+            f.write(img.content)
+        print(f"Mavzu fotosi: '{query_en}' (muallif: {photo.get('photographer') or '?'})")
+        return out_path
+    except Exception as e:
+        print(f"Mavzu fotosi olinmadi ({e}) -> post matn holida chiqadi.")
+        return None
+
+
 # ------------------------------------------------------------------ INSTANT VIEW (telegra.ph)
 # Maqola matnini telegra.ph sahifasiga ko'chiramiz -> Telegram'da avtomatik
 # Instant View bilan ochiladi (obunachi ilovadan chiqmasdan to'liq o'qiydi).
@@ -1873,7 +1924,8 @@ def calendar_entry(now, fname="editorial_calendar.csv", slot=None):
 
 
 def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None,
-                       theme=None, cta=None, ibora_phrase=None, ibora_gloss=None) -> bool:
+                       theme=None, cta=None, ibora_phrase=None, ibora_gloss=None,
+                       as_photo=False, photo_queries=None) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
@@ -1941,6 +1993,21 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 posted = True
             except Exception as e:
                 print(f"Ibora karta xato (matnga qaytamiz): {e}")
+        if not posted and as_photo:
+            # Mavzuga mos INTERNETDAN olingan foto + matn CAPTION sifatida.
+            # Matn rasm ICHIGA chizilmaydi. Foto topilmasa -> pastdagi matn posti.
+            try:
+                img = fetch_topic_photo(theme, "p_blog_photo.jpg",
+                                        query=(photo_queries or {}).get(theme))
+                if img:
+                    body = html.escape(_trim_sentence(text, 850), quote=False)
+                    if ch.startswith("@"):
+                        body += (f"\n\n— <a href=\"https://t.me/{ch[1:]}\">"
+                                 f"{html.escape(label, quote=False)}</a>")
+                    post_photo(img, body)
+                    posted = True
+            except Exception as e:
+                print(f"Mavzu fotosi bilan post xato (matnga qaytamiz): {e}")
         if not posted and as_image:
             try:
                 # Pillow rangli emoji'ni chiza olmaydi -> karta uchun emoji/belgilarni olib tashlaymiz
@@ -2251,7 +2318,9 @@ def run_channel(now, date_label, group, cfg) -> list:
                                  as_image=cfg.get("blog_image", False),
                                  words=cfg.get("blog_words"),
                                  theme=cal_theme, cta=cal_cta,
-                                 ibora_phrase=ibora_phrase, ibora_gloss=ibora_gloss)
+                                 ibora_phrase=ibora_phrase, ibora_gloss=ibora_gloss,
+                                 as_photo=cfg.get("blog_photo", False),
+                                 photo_queries=cfg.get("photo_queries"))
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:
