@@ -558,8 +558,21 @@ def _trim_sentence(text: str, limit: int) -> str:
     return (cut[:sp].rstrip() if sp > 0 else cut) + "…"
 
 
+def _md_to_html(text: str) -> str:
+    """**qalin** -> <b>, __kursiv__ -> <i>; qolgan yakka belgilar tozalanadi.
+
+    HTML xavfsizligi: avval xom matn escape qilinadi, SO'NG teglarga aylantiriladi
+    (shu tartibda belgilar ichidagi < > & ham to'g'ri escape bo'ladi -> teglar buzilmaydi).
+    Juftlanmagan qoldiq (masalan kesilgan **) shunchaki o'chiriladi -> ochiq tag qolmaydi.
+    """
+    out = html.escape(text, quote=False)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out, flags=re.S)
+    out = re.sub(r"__(.+?)__", r"<i>\1</i>", out, flags=re.S)
+    return out.replace("__", "").replace("*", "")
+
+
 def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
-            persona: str = "") -> str | None:
+            persona: str = "", words=None) -> str | None:
     """Yangilikni BATAFSIL, MA'LUMOTLI post sifatida tabiiy O'zbekchaga aylantiradi.
 
     body (maqolaning to'liq matni) berilsa -> post uzunroq va mazmunliroq bo'ladi.
@@ -572,6 +585,7 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
     elif desc:
         src += "\n" + desc.strip()
     persona = (persona or "").strip() or "zamonaviy startap, AI va texnologiya blogeri"
+    n_lo, n_hi = (words or (70, 130))     # har-kanal so'z chegarasi (news_words)
     focus_line = (f"- YO'NALISH (eng muhim): {focus.strip()}\n") if focus and focus.strip() else ""
     prompt = (
         f"Sen O'zbek tilida (lotin alifbosida) yozadigan {persona}san va professional "
@@ -593,7 +607,7 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
         "MUROJAAT/SALOMLASHUV jumlalar bilan BOSHLAMA — sarlavhadan keyin to'g'ridan-to'g'ri "
         "asosiy ma'lumotga kir.\n"
         "- Postni TO'LIQ, tugallangan jumla bilan yakunla — yarim jumlada to'xtatma.\n"
-        "- Sarlavha + tana taxminan 70-130 so'z. Asosiy faktni ber, lekin cho'zma.\n"
+        f"- Sarlavha + tana taxminan {n_lo}-{n_hi} so'z. Asosiy faktni ber, lekin cho'zma.\n"
         "- Ko'pi bilan 2-3 mos emoji ishlat (sarlavhadagidan tashqari), ortiqcha emas.\n"
         "- Qalinlik uchun FAQAT **shu tarzda** belgila (masalan **so'z**); boshqa "
         "markdown (# sarlavha, __, `kod`) yoki xom HTML teglari ishlatma.\n"
@@ -615,11 +629,7 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
     # <b> teglariga aylantirishdan OLDIN) qilinadi, aks holda kesish yopilmagan </b>
     # qoldirib, Telegram HTML xatosiga olib kelishi mumkin edi. Footer uchun joy qoldiramiz.
     out = _trim_sentence(out, 920)
-    # HTML xavfsizligi: avval xom matnni escape qilamiz, SO'NG **qalin**ni <b> ga aylantiramiz
-    # (shu tartibda -> asteriks ichidagi < > & ham to'g'ri escape bo'ladi, teglar buzilmaydi).
-    out = html.escape(out, quote=False)
-    out = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
-    out = out.replace("__", "").replace("*", "")   # qolgan yakka yulduzcha/pastki chiziq -> tozalash
+    out = _md_to_html(out)
     return out or None
 
 
@@ -1713,7 +1723,8 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
             resp2.raise_for_status()
 
 
-def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no_iv=False) -> bool:
+def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no_iv=False,
+                  words=None) -> bool:
     """Tezkor xabar (toza): rasm tepada + qisqa matn + pastda "Instant View" tugma.
 
     voice="blog" -> matn bir kishi yuritayotgan shaxsiy blog ovozida qayta yoziladi.
@@ -1736,7 +1747,8 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
             if td and tt and len(td & tt) / min(len(td), len(tt)) >= 0.6:
                 desc = ""
         body = _article_text(link) if voice == "blog" else ""   # to'liq matn -> batafsilroq
-        blog = blogify(title, desc, body, focus or "", persona or "") if voice == "blog" else None
+        blog = (blogify(title, desc, body, focus or "", persona or "", words=words)
+                if voice == "blog" else None)
         if blog:
             # Shaxsiy blog ovozi: blogify() o'zi xavfsiz escape qilib, <b> teglarini
             # qo'shib qaytaradi (sarlavha/qalin matn uchun) -> bu yerda QAYTA escape qilmaymiz,
@@ -1925,7 +1937,7 @@ def calendar_entry(now, fname="editorial_calendar.csv", slot=None):
 
 def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None,
                        theme=None, cta=None, ibora_phrase=None, ibora_gloss=None,
-                       as_photo=False, photo_queries=None) -> bool:
+                       as_photo=False, photo_queries=None, rich=False) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
@@ -1950,6 +1962,26 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
         lo, hi = (words or (90, 160))         # har-kanal so'z chegarasi (Morning Box -> uzunroq)
         focus_line = (f"Kanal yo'nalishi (e'tiborga ol): {focus}\n" if focus else "")
         cta_line = (f"- Postni aynan shu amaliy harakat bilan yakunla: {cta}\n" if cta else "")
+        # rich=True -> post o'qishga qulay bo'lishi uchun formatlash vositalari ochiladi
+        # (qalin/kursiv, xilma-xil abzas ritmi, qator boshi belgilari, emoji).
+        rich_line = (
+            "- MATN KO'RINISHI (o'qishga qulaylik uchun juda muhim):\n"
+            "  · Uzun, zich blok YOZMA. Abzas uzunligini XILMA-XIL qil: bir joyda "
+            "2-3 qator, boshqasida 3-4, yana boshqasida 4-5 qator — bir xil ritm zeriktiradi.\n"
+            "  · Abzaslar orasida albatta BO'SH QATOR qoldir.\n"
+            "  · Sanab o'tiladigan joylarda qator boshiga belgi qo'y va ularni ham "
+            "almashtirib tur: • (nuqta), — (tire) yoki mavzuga mos emoji "
+            "(masalan ✅ tasdiqlangan fakt, ⚠️ ogohlantirish, \U0001F4A1 maslahat, "
+            "\U0001F50E tadqiqot, \U0001F449 amaliy qadam).\n"
+            "  · Eng muhim so'z yoki raqamni **qalin** qil (masalan **8 soat**). "
+            "Nozik ma'no yoki izohni __kursiv__ bilan ajratsang bo'ladi. Boshqa markdown "
+            "(# sarlavha, `kod`) yoki xom HTML teglari ISHLATMA.\n"
+            "  · Emoji matn ichida ham ishlatilishi mumkin, lekin o'lchovni saqla: "
+            "har abzasda bittadan oshmasin, bezak uchun emas — ma'no uchun.\n"
+            if rich else
+            "- Faqat oddiy matn — HTML, markdown yoki yulduzcha (*) ishlatma.\n"
+            "- 1-3 ta mos emoji bo'lsa bo'ladi, ortiqcha emas.\n"
+        )
         prompt = (
             f"Sen O'zbek tilida (lotin alifbosida) yozadigan {who}san. "
             "O'quvching \u2014 fikrlaydigan, o'zini rivojlantirishni istagan odamlar.\n"
@@ -1967,9 +1999,9 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             "- 'Salom', 'Assalomu alaykum', 'azizlarim', 'do'stlar' kabi MUROJAAT/SALOMLASHUV "
             "bilan BOSHLAMA — to'g'ridan-to'g'ri mavzuning o'ziga kir.\n"
             "- Kuchli birinchi jumla bilan boshla; oxirida kichik xulosa yoki o'ylantiruvchi savol qoldir.\n"
-            f"- {lo}-{hi} so'z. Faqat oddiy matn \u2014 HTML, markdown yoki yulduzcha (*) ishlatma.\n"
-            "- 1-3 ta mos emoji bo'lsa bo'ladi, ortiqcha emas.\n"
-            "- Sarlavha yoki 'Mavzu:' yozma \u2014 to'g'ridan-to'g'ri post matnini ber.\n"
+            f"- {lo}-{hi} so'z.\n"
+            + rich_line
+            + "- Sarlavha yoki 'Mavzu:' yozma \u2014 to'g'ridan-to'g'ri post matnini ber.\n"
             + cta_line
             + focus_line
         )
@@ -1977,10 +2009,15 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
         if not text:
             print("Original blog: LLM javob bermadi (Gemini/Claude).")
             return False
-        text = text.strip().strip('"').replace("**", "").replace("__", "").replace("*", "").strip()
+        text = text.strip().strip('"').strip()
+        if not rich:                           # oddiy rejim -> markdown belgilari kerak emas
+            text = text.replace("**", "").replace("__", "").replace("*", "").strip()
         text = _strip_greeting(text)           # "Salom, azizlarim!" murojaatini olib tashla
         ch = str(TELEGRAM_CHANNEL).strip()
         label = CHANNEL_NAME or ch
+        # rich -> **qalin**/__kursiv__ Telegram teglariga aylantiriladi (escape ichida),
+        # aks holda oddiy escape. Kesish HAR DOIM aylantirishdan OLDIN -> ochiq tag qolmaydi.
+        fmt_body = _md_to_html if rich else (lambda s: html.escape(s, quote=False))
         posted = False
         if ibora_phrase:
             try:
@@ -2000,7 +2037,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 img = fetch_topic_photo(theme, "p_blog_photo.jpg",
                                         query=(photo_queries or {}).get(theme))
                 if img:
-                    body = html.escape(_trim_sentence(text, 850), quote=False)
+                    body = fmt_body(_trim_sentence(text, 850))
                     if ch.startswith("@"):
                         body += (f"\n\n— <a href=\"https://t.me/{ch[1:]}\">"
                                  f"{html.escape(label, quote=False)}</a>")
@@ -2014,6 +2051,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 card_text = re.sub(
                     r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
                     r"\U0000FE0F\U00002190-\U000021FF\U00002B00-\U00002BFF]", "", text)
+                card_text = card_text.replace("**", "").replace("__", "").replace("*", "")
                 card_text = re.sub(r"[ \t]+", " ", card_text)
                 card_text = re.sub(r"\s+([.,!?;:])", r"\1", card_text).strip()   # emoji o'rnidagi bo'shliq
                 img = render_blog_card(card_text, label, "p_blog.png")
@@ -2024,7 +2062,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             except Exception as e:
                 print(f"Blog karta xato (matnga qaytamiz): {e}")
         if not posted:
-            body = html.escape(_trim_sentence(text, 1600), quote=False)
+            body = fmt_body(_trim_sentence(text, 1600))
             if ch.startswith("@"):
                 body += (f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">"
                          f"{html.escape(label, quote=False)}</a>")
@@ -2278,7 +2316,8 @@ def run_channel(now, date_label, group, cfg) -> list:
         n_ok = 0
         for it in fresh:
             ok = post_breaking(it, translate=translate, voice=voice, focus=focus, persona=persona,
-                               no_iv=cfg.get("no_instant_view", False))
+                               no_iv=cfg.get("no_instant_view", False),
+                               words=cfg.get("news_words"))
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
@@ -2320,7 +2359,8 @@ def run_channel(now, date_label, group, cfg) -> list:
                                  theme=cal_theme, cta=cal_cta,
                                  ibora_phrase=ibora_phrase, ibora_gloss=ibora_gloss,
                                  as_photo=cfg.get("blog_photo", False),
-                                 photo_queries=cfg.get("photo_queries"))
+                                 photo_queries=cfg.get("photo_queries"),
+                                 rich=cfg.get("blog_rich", False))
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:
