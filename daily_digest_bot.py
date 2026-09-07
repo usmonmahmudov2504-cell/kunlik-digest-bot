@@ -94,7 +94,7 @@ def load_channels() -> list:
 def _apply_channel(cfg: dict) -> None:
     """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
     global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES, CHANNEL_NAME
-    global SOCIAL_LINKS
+    global SOCIAL_LINKS, POST_NOTES
     TELEGRAM_CHANNEL = cfg["channel"]
     TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
                                         os.environ.get("TELEGRAM_BOT_TOKEN", ""))
@@ -102,15 +102,38 @@ def _apply_channel(cfg: dict) -> None:
     CHANNEL_NAME = cfg.get("name") or str(cfg["channel"]).lstrip("@")
     FOOTER_SERVICES = cfg.get("footer_services", "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar")
     SOCIAL_LINKS = cfg.get("social_links") or {}
+    POST_NOTES = cfg.get("post_notes") or []
 
 
 # Post ostidagi ijtimoiy tarmoq qatori uchun: kanal config'idagi social_links
 # ({"instagram": "...", "youtube": "..."}). Bo'sh bo'lsa -> eski, faqat kanal nomli footer.
 SOCIAL_LINKS: dict = {}
+# Post oxiridagi aylanma eslatma (post_notes). Bir xil jumla har safar takrorlansa
+# o'quvchining ko'zi unga o'rganib, butunlay o'tkazib yuboradi -> navbatma-navbat.
+POST_NOTES: list = []
 # Tartib qat'iy: Telegram (kanalning o'zi) -> Instagram -> YouTube.
 _SOCIAL_ORDER = (("telegram", "✈️", "Telegram"),
                  ("instagram", "📸", "Instagram"),
                  ("youtube", "▶️", "YouTube"))
+
+
+def _post_note() -> str:
+    """Post oxiridagi eslatma (post_notes ro'yxatidan) -- ketma-ket bir xili chiqmaydi.
+
+    Oxirgi ishlatilgani state'da saqlanadi va keyingi tanlovdan chiqarib tashlanadi.
+    post_notes bo'lmagan kanallarda bo'sh satr qaytadi -> ular o'zgarishsiz qoladi.
+    """
+    notes = [n for n in (POST_NOTES or []) if str(n).strip()]
+    if not notes:
+        return ""
+    try:
+        last = _load_json("post_note.json", {}).get("last")
+        pool = [n for n in notes if n != last] or notes
+        note = random.choice(pool)
+        _save_json("post_note.json", {"last": note})
+    except Exception:
+        note = random.choice(notes)          # state o'qilmasa ham eslatma chiqaversin
+    return "\n\n" + html.escape(note, quote=False)
 
 
 def _social_footer(channel_label: str) -> str:
@@ -1795,7 +1818,7 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
         # Ko'rinadigan matn = chiroyli kanal nomi; havola o'sha kanalga (o'zgarmaydi).
         label = html.escape(CHANNEL_NAME or ch, quote=False)
         if voice == "blog":
-            cap += _social_footer(CHANNEL_NAME or ch)
+            cap += _post_note() + _social_footer(CHANNEL_NAME or ch)
         elif ch.startswith("@"):
             cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
                     " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
@@ -2069,7 +2092,8 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 img = fetch_topic_photo(theme, "p_blog_photo.jpg",
                                         query=(photo_queries or {}).get(theme))
                 if img:
-                    body = fmt_body(_trim_sentence(text, 800)) + _social_footer(label)
+                    body = (fmt_body(_trim_sentence(text, 720))
+                            + _post_note() + _social_footer(label))
                     post_photo(img, body)
                     posted = True
             except Exception as e:
@@ -2091,7 +2115,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             except Exception as e:
                 print(f"Blog karta xato (matnga qaytamiz): {e}")
         if not posted:
-            body = fmt_body(_trim_sentence(text, 1600)) + _social_footer(label)
+            body = fmt_body(_trim_sentence(text, 1600)) + _post_note() + _social_footer(label)
             post_message(body, link_preview={"is_disabled": True})
         recent.append(theme)
         st["recent"] = recent[-10:]
