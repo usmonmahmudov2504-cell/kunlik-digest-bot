@@ -94,12 +94,44 @@ def load_channels() -> list:
 def _apply_channel(cfg: dict) -> None:
     """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
     global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES, CHANNEL_NAME
+    global SOCIAL_LINKS
     TELEGRAM_CHANNEL = cfg["channel"]
     TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
                                         os.environ.get("TELEGRAM_BOT_TOKEN", ""))
     CHANNEL_KEY = re.sub(r"[^A-Za-z0-9_]", "_", str(cfg["channel"]).lstrip("@")) or "default"
     CHANNEL_NAME = cfg.get("name") or str(cfg["channel"]).lstrip("@")
     FOOTER_SERVICES = cfg.get("footer_services", "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar")
+    SOCIAL_LINKS = cfg.get("social_links") or {}
+
+
+# Post ostidagi ijtimoiy tarmoq qatori uchun: kanal config'idagi social_links
+# ({"instagram": "...", "youtube": "..."}). Bo'sh bo'lsa -> eski, faqat kanal nomli footer.
+SOCIAL_LINKS: dict = {}
+# Tartib qat'iy: Telegram (kanalning o'zi) -> Instagram -> YouTube.
+_SOCIAL_ORDER = (("telegram", "✈️", "Telegram"),
+                 ("instagram", "📸", "Instagram"),
+                 ("youtube", "▶️", "YouTube"))
+
+
+def _social_footer(channel_label: str) -> str:
+    """Post ostiga qo'yiladigan havolalar qatorini (HTML) qaytaradi.
+
+    social_links bo'lsa -> "✈️ Telegram | 📸 Instagram | ▶️ YouTube" (har biri bosiladigan).
+    Bo'lmasa -> eski ko'rinish: "— <kanal nomi>" (boshqa kanallar o'zgarishsiz qoladi).
+    """
+    ch = str(TELEGRAM_CHANNEL).strip()
+    tg = SOCIAL_LINKS.get("telegram") or (f"https://t.me/{ch[1:]}" if ch.startswith("@") else "")
+    links = dict(SOCIAL_LINKS or {})
+    if tg:
+        links["telegram"] = tg
+    parts = [f'{icon} <a href="{html.escape(links[key], quote=True)}">{name}</a>'
+             for key, icon, name in _SOCIAL_ORDER if links.get(key)]
+    if len(parts) > 1:
+        return "\n\n" + " | ".join(parts)
+    if tg:                                    # yolg'iz Telegram -> eski uslub saqlanadi
+        return (f'\n\n— <a href="{html.escape(tg, quote=True)}">'
+                f'{html.escape(channel_label, quote=False)}</a>')
+    return ""
 
 UA = {"User-Agent": "Mozilla/5.0 (digest-bot)"}
 # Maqola sahifalaridan rasm (og:image) olishda haqiqiy brauzer UA ishonchliroq.
@@ -1762,8 +1794,8 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
         ch = str(TELEGRAM_CHANNEL).strip()
         # Ko'rinadigan matn = chiroyli kanal nomi; havola o'sha kanalga (o'zgarmaydi).
         label = html.escape(CHANNEL_NAME or ch, quote=False)
-        if ch.startswith("@") and voice == "blog":
-            cap += f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
+        if voice == "blog":
+            cap += _social_footer(CHANNEL_NAME or ch)
         elif ch.startswith("@"):
             cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
                     " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
@@ -2037,10 +2069,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 img = fetch_topic_photo(theme, "p_blog_photo.jpg",
                                         query=(photo_queries or {}).get(theme))
                 if img:
-                    body = fmt_body(_trim_sentence(text, 850))
-                    if ch.startswith("@"):
-                        body += (f"\n\n— <a href=\"https://t.me/{ch[1:]}\">"
-                                 f"{html.escape(label, quote=False)}</a>")
+                    body = fmt_body(_trim_sentence(text, 800)) + _social_footer(label)
                     post_photo(img, body)
                     posted = True
             except Exception as e:
@@ -2062,10 +2091,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             except Exception as e:
                 print(f"Blog karta xato (matnga qaytamiz): {e}")
         if not posted:
-            body = fmt_body(_trim_sentence(text, 1600))
-            if ch.startswith("@"):
-                body += (f"\n\n\u2014 <a href=\"https://t.me/{ch[1:]}\">"
-                         f"{html.escape(label, quote=False)}</a>")
+            body = fmt_body(_trim_sentence(text, 1600)) + _social_footer(label)
             post_message(body, link_preview={"is_disabled": True})
         recent.append(theme)
         st["recent"] = recent[-10:]
