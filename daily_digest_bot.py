@@ -2052,6 +2052,18 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
         fmt = random.choice(BLOG_FORMATS)
         who = persona or "tajribali, samimiy bloger"
         lo, hi = (words or (90, 160))         # har-kanal so'z chegarasi (Morning Box -> uzunroq)
+        ch = str(TELEGRAM_CHANNEL).strip()
+        label = CHANNEL_NAME or ch
+        # Post oxirini (imzo + eslatma + havolalar) OLDIN yasaymiz: shunda matnga qancha
+        # joy qolishini bilamiz va CHEGARANI PROMPT'GA yozamiz. So'z bilan aytilgan
+        # chegarani model muntazam oshirib yuboradi -> belgida, qat'iy qilib aytiladi.
+        tail = _post_signature() + _post_note() + _social_footer(label)
+        budget = _caption_budget(tail)
+        limit_line = (
+            f"- QAT'IY TEXNIK CHEGARA: post JAMI {budget - 40} belgidan OSHMASIN "
+            "(bo'sh qatorlar va emojilar ham sanaladi). Bu Telegram cheklovi: oshsa "
+            "post OXIRIDAN kesiladi va eng muhim yakuniy jumla yo'qoladi. "
+            "Shubhalansang — qisqaroq yoz.\n") if as_photo else ""
         focus_line = (f"Kanal yo'nalishi (e'tiborga ol): {focus}\n" if focus else "")
         cta_line = (f"- Postni aynan shu amaliy harakat bilan yakunla: {cta}\n" if cta else "")
         # rich=True -> post o'qishga qulay bo'lishi uchun formatlash vositalari ochiladi
@@ -2096,6 +2108,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             + "- Sarlavha yoki 'Mavzu:' yozma \u2014 to'g'ridan-to'g'ri post matnini ber.\n"
             + cta_line
             + focus_line
+            + limit_line          # oxirida -> model uchun eng ko'rinarli joy
         )
         text = llm_text(prompt, max_tokens=900)
         if not text:
@@ -2105,8 +2118,6 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
         if not rich:                           # oddiy rejim -> markdown belgilari kerak emas
             text = text.replace("**", "").replace("__", "").replace("*", "").strip()
         text = _strip_greeting(text)           # "Salom, azizlarim!" murojaatini olib tashla
-        ch = str(TELEGRAM_CHANNEL).strip()
-        label = CHANNEL_NAME or ch
         # rich -> **qalin**/__kursiv__ Telegram teglariga aylantiriladi (escape ichida),
         # aks holda oddiy escape. Kesish HAR DOIM aylantirishdan OLDIN -> ochiq tag qolmaydi.
         fmt_body = _md_to_html if rich else (lambda s: html.escape(s, quote=False))
@@ -2129,8 +2140,6 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 img = fetch_topic_photo(theme, "p_blog_photo.jpg",
                                         query=(photo_queries or {}).get(theme))
                 if img:
-                    tail = _post_signature() + _post_note() + _social_footer(label)
-                    budget = _caption_budget(tail)
                     cut = _trim_sentence(text, budget)
                     if len(cut) < len(text.strip()):
                         # Oxirgi jumla odatda ENG muhimi (amaliy maslahat) -> kesilsa bilaylik.
