@@ -121,6 +121,24 @@ _SOCIAL_ORDER = (("telegram", "✈️", "Telegram"),
                  ("youtube", "▶️", "YouTube"))
 
 
+def _visible_len(s: str) -> int:
+    """Telegram chegarasi HTML teglarini emas, KO'RINADIGAN matnni sanaydi.
+
+    <a href="..."> ichidagi uzun havola limitga kirmaydi -> post oxiri uchun
+    haqiqiy "narx" faqat ko'rinadigan so'zlar (Telegram | Instagram | YouTube).
+    """
+    return len(html.unescape(re.sub(r"<[^>]+>", "", s or "")))
+
+
+def _caption_budget(tail_html: str, limit: int = 1024, margin: int = 12) -> int:
+    """Post oxiri (imzo + eslatma + havolalar) hisobga olinib, MATNGA qolgan joy.
+
+    Qat'iy son o'rniga hisoblanadi -> oxiri o'zgarsa chegara ham o'ziga moslashadi
+    va matnning eng muhim qismi (yakuniy amaliy maslahat) kesilib qolmaydi.
+    """
+    return max(200, limit - _visible_len(tail_html) - margin)
+
+
 def _post_signature() -> str:
     """Matn ostidagi brend imzosi (post_signature). Bo'lmasa -> bo'sh satr."""
     sig = str(POST_SIGNATURE or "").strip()
@@ -637,7 +655,7 @@ def _md_to_html(text: str) -> str:
 
 
 def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
-            persona: str = "", words=None) -> str | None:
+            persona: str = "", words=None, limit: int = 920) -> str | None:
     """Yangilikni BATAFSIL, MA'LUMOTLI post sifatida tabiiy O'zbekchaga aylantiradi.
 
     body (maqolaning to'liq matni) berilsa -> post uzunroq va mazmunliroq bo'ladi.
@@ -693,9 +711,12 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
     # Jumla oxirida kes (so'z o'rtasidan emas) -- BU YERDA, xom **markdown** ustida (ya'ni
     # <b> teglariga aylantirishdan OLDIN) qilinadi, aks holda kesish yopilmagan </b>
     # qoldirib, Telegram HTML xatosiga olib kelishi mumkin edi. Footer uchun joy qoldiramiz.
-    out = _trim_sentence(out, 920)
-    out = _md_to_html(out)
-    return out or None
+    cut = _trim_sentence(out, limit)
+    if len(cut) < len(out.strip()):
+        # Oxirgi jumla odatda ENG muhimi (amaliy xulosa) -> kesilsa xabar beramiz.
+        print(f"  DIQQAT: yangilik posti caption'ga sig'madi -> {len(out)} belgidan "
+              f"{len(cut)} qoldi (chegara {limit}). news_words'ni kamaytiring.")
+    return _md_to_html(cut) or None
 
 
 def _article_text(link: str, max_paras: int = 12, max_chars: int = 3500) -> str:
@@ -1812,7 +1833,13 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
             if td and tt and len(td & tt) / min(len(td), len(tt)) >= 0.6:
                 desc = ""
         body = _article_text(link) if voice == "blog" else ""   # to'liq matn -> batafsilroq
-        blog = (blogify(title, desc, body, focus or "", persona or "", words=words)
+        # Post oxirini (imzo + eslatma + havolalar) OLDIN yasaymiz -> matnga qancha joy
+        # qolishini aniq bilamiz va blogify o'sha chegara ichida yakunlaydi. Aks holda
+        # oxirgi jumla (eng muhim -- amaliy maslahat) caption limitida kesilib qolardi.
+        tail = (_post_signature() + _post_note() + _social_footer(CHANNEL_NAME or TELEGRAM_CHANNEL)
+                if voice == "blog" else "")
+        blog = (blogify(title, desc, body, focus or "", persona or "", words=words,
+                        limit=_caption_budget(tail))
                 if voice == "blog" else None)
         if blog:
             # Shaxsiy blog ovozi: blogify() o'zi xavfsiz escape qilib, <b> teglarini
@@ -1828,7 +1855,7 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
         # Ko'rinadigan matn = chiroyli kanal nomi; havola o'sha kanalga (o'zgarmaydi).
         label = html.escape(CHANNEL_NAME or ch, quote=False)
         if voice == "blog":
-            cap += _post_signature() + _post_note() + _social_footer(CHANNEL_NAME or ch)
+            cap += tail
         elif ch.startswith("@"):
             cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
                     " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
@@ -2102,8 +2129,14 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 img = fetch_topic_photo(theme, "p_blog_photo.jpg",
                                         query=(photo_queries or {}).get(theme))
                 if img:
-                    body = (fmt_body(_trim_sentence(text, 680)) + _post_signature()
-                            + _post_note() + _social_footer(label))
+                    tail = _post_signature() + _post_note() + _social_footer(label)
+                    budget = _caption_budget(tail)
+                    cut = _trim_sentence(text, budget)
+                    if len(cut) < len(text.strip()):
+                        # Oxirgi jumla odatda ENG muhimi (amaliy maslahat) -> kesilsa bilaylik.
+                        print(f"  DIQQAT: post caption'ga sig'madi -> {len(text)} belgidan "
+                              f"{len(cut)} qoldi (chegara {budget}). blog_words'ni kamaytiring.")
+                    body = fmt_body(cut) + tail
                     post_photo(img, body)
                     posted = True
             except Exception as e:

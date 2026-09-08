@@ -359,8 +359,8 @@
     "footer_services": "🫀 Sog'liq · 🥦 Ovqatlanish · 🧠 Ruhiy muvozanat",
     "blog_image": false,
     "blog_words": [
-      110,
-      170
+      85,
+      120
     ],
     "blog_photo": true,
     "photo_queries": {
@@ -396,8 +396,8 @@
       "yosh ulg'aygan sari tanada nimalar o'zgaradi va nimaga tayyor bo'lish kerak": "senior person active aging"
     },
     "news_words": [
-      110,
-      170
+      95,
+      135
     ],
     "blog_rich": true,
     "social_links": {
