@@ -406,9 +406,10 @@
     },
     "post_notes": [
       "ℹ️ Umumiy ma'lumot. Aniq holatingiz uchun shifokorga murojaat qiling.",
-      "🩺 Har bir organizm o'ziga xos — jiddiy o'zgarishni shifokoringiz bilan maslahatlashib boshlang.",
+      "🧬 Har bir organizm o'ziga xos — jiddiy o'zgarishni shifokoringiz bilan maslahatlashib boshlang.",
       "🔎 Post ishonchli tibbiy manbalarga tayanadi, lekin shaxsiy ko'rik o'rnini bosmaydi.",
       "⚠️ Alomat uzoq davom etsa yoki kuchaysa — kechiktirmasdan shifokorga boring."
-    ]
+    ],
+    "post_signature": "🩺 Doctor Zafar"
   }
 ]

@@ -94,7 +94,7 @@ def load_channels() -> list:
 def _apply_channel(cfg: dict) -> None:
     """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
     global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES, CHANNEL_NAME
-    global SOCIAL_LINKS, POST_NOTES
+    global SOCIAL_LINKS, POST_NOTES, POST_SIGNATURE
     TELEGRAM_CHANNEL = cfg["channel"]
     TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
                                         os.environ.get("TELEGRAM_BOT_TOKEN", ""))
@@ -103,6 +103,7 @@ def _apply_channel(cfg: dict) -> None:
     FOOTER_SERVICES = cfg.get("footer_services", "🌤 Ob-havo · 💵 Kurslar · ⚡ Yangiliklar")
     SOCIAL_LINKS = cfg.get("social_links") or {}
     POST_NOTES = cfg.get("post_notes") or []
+    POST_SIGNATURE = cfg.get("post_signature") or ""
 
 
 # Post ostidagi ijtimoiy tarmoq qatori uchun: kanal config'idagi social_links
@@ -111,10 +112,19 @@ SOCIAL_LINKS: dict = {}
 # Post oxiridagi aylanma eslatma (post_notes). Bir xil jumla har safar takrorlansa
 # o'quvchining ko'zi unga o'rganib, butunlay o'tkazib yuboradi -> navbatma-navbat.
 POST_NOTES: list = []
+# Post ostidagi BREND imzosi (post_signature), masalan "🩺 Doctor Zafar". Bu shaxsiy
+# imzo emas, kanal muallifligi belgisi -> matn tugagach, eslatmadan oldin qo'yiladi.
+POST_SIGNATURE: str = ""
 # Tartib qat'iy: Telegram (kanalning o'zi) -> Instagram -> YouTube.
 _SOCIAL_ORDER = (("telegram", "✈️", "Telegram"),
                  ("instagram", "📸", "Instagram"),
                  ("youtube", "▶️", "YouTube"))
+
+
+def _post_signature() -> str:
+    """Matn ostidagi brend imzosi (post_signature). Bo'lmasa -> bo'sh satr."""
+    sig = str(POST_SIGNATURE or "").strip()
+    return f"\n\n<b>{html.escape(sig, quote=False)}</b>" if sig else ""
 
 
 def _post_note() -> str:
@@ -1818,7 +1828,7 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
         # Ko'rinadigan matn = chiroyli kanal nomi; havola o'sha kanalga (o'zgarmaydi).
         label = html.escape(CHANNEL_NAME or ch, quote=False)
         if voice == "blog":
-            cap += _post_note() + _social_footer(CHANNEL_NAME or ch)
+            cap += _post_signature() + _post_note() + _social_footer(CHANNEL_NAME or ch)
         elif ch.startswith("@"):
             cap += (f"\n\n\U0001F449 <a href=\"https://t.me/{ch[1:]}\">{label}</a>"
                     " \u00b7 obuna bo'ling \U0001F514 \u00b7 ulashing \U0001F4E2")
@@ -2092,7 +2102,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 img = fetch_topic_photo(theme, "p_blog_photo.jpg",
                                         query=(photo_queries or {}).get(theme))
                 if img:
-                    body = (fmt_body(_trim_sentence(text, 720))
+                    body = (fmt_body(_trim_sentence(text, 680)) + _post_signature()
                             + _post_note() + _social_footer(label))
                     post_photo(img, body)
                     posted = True
@@ -2115,7 +2125,8 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             except Exception as e:
                 print(f"Blog karta xato (matnga qaytamiz): {e}")
         if not posted:
-            body = fmt_body(_trim_sentence(text, 1600)) + _post_note() + _social_footer(label)
+            body = (fmt_body(_trim_sentence(text, 1600)) + _post_signature()
+                    + _post_note() + _social_footer(label))
             post_message(body, link_preview={"is_disabled": True})
         recent.append(theme)
         st["recent"] = recent[-10:]
