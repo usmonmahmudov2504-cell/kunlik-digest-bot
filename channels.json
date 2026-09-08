@@ -148,7 +148,7 @@
   },
   {
     "name": "Doctor Zafar | Sog'lom Hayot",
-    "channel": "@doctor_zafar_soglomhayot",
+    "channel": "@doctorzafaruz",
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": [
       "C",
@@ -402,7 +402,8 @@
     "blog_rich": true,
     "social_links": {
       "instagram": "https://www.instagram.com/dr.zafar_zayniddinovich_",
-      "youtube": "https://youtube.com/@dr_zafar_zayniddinovich"
+      "youtube": "https://youtube.com/@dr_zafar_zayniddinovich",
+      "telegram": "https://t.me/doctorzafaruz"
     },
     "post_notes": [
       "ℹ️ Umumiy ma'lumot. Aniq holatingiz uchun shifokorga murojaat qiling.",
@@ -410,6 +411,7 @@
       "🔎 Post ishonchli tibbiy manbalarga tayanadi, lekin shaxsiy ko'rik o'rnini bosmaydi.",
       "⚠️ Alomat uzoq davom etsa yoki kuchaysa — kechiktirmasdan shifokorga boring."
     ],
-    "post_signature": "🩺 Doctor Zafar"
+    "post_signature": "🩺 Doctor Zafar",
+    "blog_ending": "OXIRGI QATOR — MAJBURIY VA ENG MUHIM QISM: postni 👉 belgisi bilan boshlanadigan BITTA ANIQ amaliy qadam bilan yakunla. ANIQ degani: nima qilish kerak + qancha (vaqt, miqdor, necha marta) + qachon. YAXSHI namunalar: '👉 Bugun kechqurun oxirgi ovqatni uyqudan 3 soat oldin yeb bo'ling'; '👉 Ertaga ertalab nonushtadan oldin 10 daqiqa tashqarida yuring'; '👉 Shu hafta har kuni bittadan qaynatilgan tuxum qo'shing'. YOMON namunalar (QAT'IYAN yozma): 'e'tiborli bo'ling', 'salomatligingizni asrang', 'imkoniyat bering', 'muhim ahamiyatga ega', 'to'g'ri ovqatlaning' — bular mavhum, o'quvchi ular bilan nima qilishni bilmaydi. Oxirgi qator o'quvchi telefonini qo'yib, DARHOL bajara oladigan ish bo'lsin."
   }
 ]

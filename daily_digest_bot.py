@@ -655,7 +655,8 @@ def _md_to_html(text: str) -> str:
 
 
 def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
-            persona: str = "", words=None, limit: int = 920) -> str | None:
+            persona: str = "", words=None, limit: int = 920,
+            ending: str | None = None) -> str | None:
     """Yangilikni BATAFSIL, MA'LUMOTLI post sifatida tabiiy O'zbekchaga aylantiradi.
 
     body (maqolaning to'liq matni) berilsa -> post uzunroq va mazmunliroq bo'ladi.
@@ -699,8 +700,9 @@ def blogify(title: str, desc: str = "", body: str = "", focus: str = "",
         "voqea, soxta do'st/tanish ('bir do'stim bor'), 'menga savol berishadi' kabi yolg'on "
         "shaxsiy hikoya, to'qima raqam, statistika yoki iqtibos YOZMA. Umumiy fikr/baho "
         "berishing mumkin, lekin uni real voqea sifatida to'qib ko'rsatma.\n"
-        + focus_line +
-        "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
+        + focus_line
+        + (f"- {ending.strip()}\n" if ending else "")
+        + "- Faqat tayyor post matnini qaytar, hech qanday izoh qo'shma.\n\n"
         f"Yangilik:\n{src}\n\nPost:"
     )
     out = llm_text(prompt, max_tokens=700)
@@ -1810,7 +1812,7 @@ def post_message(text: str, reply_markup=None, link_preview=None) -> None:
 
 
 def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no_iv=False,
-                  words=None) -> bool:
+                  words=None, ending=None) -> bool:
     """Tezkor xabar (toza): rasm tepada + qisqa matn + pastda "Instant View" tugma.
 
     voice="blog" -> matn bir kishi yuritayotgan shaxsiy blog ovozida qayta yoziladi.
@@ -1839,7 +1841,7 @@ def post_breaking(item, translate=None, voice=None, focus=None, persona=None, no
         tail = (_post_signature() + _post_note() + _social_footer(CHANNEL_NAME or TELEGRAM_CHANNEL)
                 if voice == "blog" else "")
         blog = (blogify(title, desc, body, focus or "", persona or "", words=words,
-                        limit=_caption_budget(tail))
+                        limit=_caption_budget(tail), ending=ending)
                 if voice == "blog" else None)
         if blog:
             # Shaxsiy blog ovozi: blogify() o'zi xavfsiz escape qilib, <b> teglarini
@@ -2029,7 +2031,7 @@ def calendar_entry(now, fname="editorial_calendar.csv", slot=None):
 
 def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None,
                        theme=None, cta=None, ibora_phrase=None, ibora_gloss=None,
-                       as_photo=False, photo_queries=None, rich=False) -> bool:
+                       as_photo=False, photo_queries=None, rich=False, ending=None) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
@@ -2066,6 +2068,9 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             "Shubhalansang — qisqaroq yoz.\n") if as_photo else ""
         focus_line = (f"Kanal yo'nalishi (e'tiborga ol): {focus}\n" if focus else "")
         cta_line = (f"- Postni aynan shu amaliy harakat bilan yakunla: {cta}\n" if cta else "")
+        # Kanal talab qilsa -> postning OXIRGI qatori uchun qat'iy qoida. Model mavhum
+        # ("e'tiborli bo'ling") yakun yozishga moyil -> qoida namunalar bilan beriladi.
+        ending_line = (f"- {ending.strip()}\n" if ending else "")
         # rich=True -> post o'qishga qulay bo'lishi uchun formatlash vositalari ochiladi
         # (qalin/kursiv, xilma-xil abzas ritmi, qator boshi belgilari, emoji).
         rich_line = (
@@ -2108,6 +2113,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             + "- Sarlavha yoki 'Mavzu:' yozma \u2014 to'g'ridan-to'g'ri post matnini ber.\n"
             + cta_line
             + focus_line
+            + ending_line         # yakun qoidasi
             + limit_line          # oxirida -> model uchun eng ko'rinarli joy
         )
         text = llm_text(prompt, max_tokens=900)
@@ -2420,7 +2426,7 @@ def run_channel(now, date_label, group, cfg) -> list:
         for it in fresh:
             ok = post_breaking(it, translate=translate, voice=voice, focus=focus, persona=persona,
                                no_iv=cfg.get("no_instant_view", False),
-                               words=cfg.get("news_words"))
+                               words=cfg.get("news_words"), ending=cfg.get("blog_ending"))
             results.append(ok)
             if ok:
                 posted.append(_news_key(it))
@@ -2463,7 +2469,8 @@ def run_channel(now, date_label, group, cfg) -> list:
                                  ibora_phrase=ibora_phrase, ibora_gloss=ibora_gloss,
                                  as_photo=cfg.get("blog_photo", False),
                                  photo_queries=cfg.get("photo_queries"),
-                                 rich=cfg.get("blog_rich", False))
+                                 rich=cfg.get("blog_rich", False),
+                                 ending=cfg.get("blog_ending"))
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:
