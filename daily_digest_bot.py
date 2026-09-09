@@ -2116,14 +2116,30 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             + ending_line         # yakun qoidasi
             + limit_line          # oxirida -> model uchun eng ko'rinarli joy
         )
-        text = llm_text(prompt, max_tokens=900)
+        def _clean(t: str) -> str:
+            t = (t or "").strip().strip('"').strip()
+            if not rich:                       # oddiy rejim -> markdown belgilari kerak emas
+                t = t.replace("**", "").replace("__", "").replace("*", "").strip()
+            return _strip_greeting(t)          # "Salom, azizlarim!" murojaatini olib tashla
+
+        text = _clean(llm_text(prompt, max_tokens=900))
         if not text:
             print("Original blog: LLM javob bermadi (Gemini/Claude).")
             return False
-        text = text.strip().strip('"').strip()
-        if not rich:                           # oddiy rejim -> markdown belgilari kerak emas
-            text = text.replace("**", "").replace("__", "").replace("*", "").strip()
-        text = _strip_greeting(text)           # "Salom, azizlarim!" murojaatini olib tashla
+        # Model chegarani so'z bilan aytilganda ham oshirib yuboradi. Kesish esa postning
+        # OXIRINI (amaliy qadamni) yo'q qiladi -> shuning uchun bir marta QAYTA so'raymiz:
+        # qisqartirishni modelning o'zi qilsa, post tugallangan bo'lib qoladi.
+        if as_photo and len(text) > budget:
+            print(f"  Post uzun ({len(text)} > {budget}) -> qisqartirib qayta so'ralmoqda.")
+            retry = _clean(llm_text(
+                prompt + f"\n\nDIQQAT: oldingi javobing {len(text)} belgi bo'ldi — bu chegaradan "
+                f"uzun va post oxiri kesilib ketadi. Xuddi shu mavzuni, xuddi shu talablar "
+                f"bilan, lekin {max(300, budget - 120)} belgidan OSHMAYDIGAN qilib QAYTA yoz. "
+                "Fikrni qisqartir, lekin oxirgi amaliy qadamni ALBATTA saqla.",
+                max_tokens=600))
+            if retry and len(retry) < len(text):
+                print(f"  -> qayta yozildi: {len(retry)} belgi.")
+                text = retry
         # rich -> **qalin**/__kursiv__ Telegram teglariga aylantiriladi (escape ichida),
         # aks holda oddiy escape. Kesish HAR DOIM aylantirishdan OLDIN -> ochiq tag qolmaydi.
         fmt_body = _md_to_html if rich else (lambda s: html.escape(s, quote=False))
