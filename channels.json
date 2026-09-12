@@ -15,11 +15,11 @@
     "voice": "blog",
     "blog_image": false,
     "blog_words": [
-      230,
-      300
+      130,
+      180
     ],
     "voice_persona": "Morning Box muharriri — minglab kitob o'qigan, murakkab g'oyani sodda va qiziqarli tushuntira oladigan ziyoli, samimiy ustoz",
-    "voice_focus": "VAZIFA: har post — MAVZUDA ko'rsatilgan BITTA kitobning TO'LIQ, professional xulosasi. O'quvchi kitobni o'qimasdan uning asosiy mazmuni va eng qimmatli saboqlarini olsin. Quyidagi tuzilma umumiy talablardan USTUN turadi (bo'lim sarlavhalari aynan shunday yozilsin).\nTUZILMA (har bo'lim orasida BO'SH QATOR):\n1) Birinchi qator: 📚 **«Kitob nomi» — Muallif**\n2) Kirish: KO'PI BILAN 2 jumla — kitob qaysi muammoni hal qiladi va nega mashhur.\n3) 💡 **Asosiy g'oya** — yangi qatordan kitobning markaziy fikri, KO'PI BILAN 2 jumla.\n4) 🔑 **5 ta asosiy saboq** — har saboq ALOHIDA abzas: 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ + **qalin qisqa sarlavha (4-8 so'z)**, yangi qatordan KO'PI BILAN 2 qisqa jumla (taxminan 25 so'z) — sodda tushuntirish yoki kitobdagi misol.\n5) 🚀 **Bugun qo'llang** — bitta aniq qadam, 1-2 jumla.\n6) 👤 **Kimga tavsiya** — bir jumla.\nDIZAYN: uzun yaxlit matn MUTLAQO yo'q; hech bir abzas 2 jumladan oshmasin — o'quvchi telefonda o'qiydi va zich blokdan charchaydi; har bo'lim o'z emojisi bilan boshlanadi; muhim so'z va raqamlar **qalin**; emoji keng, lekin har biri ma'noli.\nANIQLIK (eng muhim): faqat kitobning HAQIQIY mazmunini yoz. Muallifning asosiy tushunchalari va ta'riflarini ASL ma'nosida ber — soddalashtirib noto'g'ri qilma. Saboqlar bir-biriga zid bo'lmasin va har biri kitobning o'z g'oyasi bo'lsin. Kitobda yo'q g'oya, to'qima iqtibos, raqam, bob nomi yoki voqea yozma. Tafsilotga ishonching komil bo'lmasa — umumiy g'oya bilan cheklan.\nTIL: to'g'ri o'zbek lotin imlosi. Inglizcha so'zlarni aralashtirma (\"emotional\" emas — \"hissiy\"). Muallifning mashhur atamasi kerak bo'lsa: o'zbekcha tarjima + qavsda asli, masalan: xavfsizlik chegarasi (margin of safety).\nOHANG: ziyoli, samimiy, jonli — quruq referat emas. Clickbait va mubolag'a yo'q.",
+    "voice_focus": "VAZIFA: MAVZUDA ko'rsatilgan kitobning MAG'ZINI qisqa va lo'nda yetkaz — o'quvchi kitobni o'qishga soatlab vaqt sarflamasdan, 1-2 daqiqada uning eng qimmatli fikrlarini olsin. Ortiqcha gap, kirish so'zlari va takror YO'Q. Bu tuzilma umumiy talablardan USTUN.\nTUZILMA (bo'limlar orasida BO'SH QATOR):\n1) 📚 **«Kitob nomi» — Muallif**\n2) Bitta jumla: kitob nima haqida va nega o'qishga arziydi.\n3) 💡 **Kitobning mag'zi** — yangi qatordan butun kitob g'oyasi 1-2 jumlada.\n4) 🔑 **Asosiy fikrlar** — 4 ta fikr, har biri ALOHIDA qatorda: ✅ + **kalit so'z** + bitta tabiiy jumla (15-20 so'z). Har biri kitobning o'ziga xos g'oyasi bo'lsin.\n5) 🚀 **Bugun qo'llang** — bitta aniq, bajarib bo'ladigan qadam, bitta jumla.\nTIL VA OHANG (juda muhim): xuddi aqlli do'st kitobni qisqacha gapirib berayotgandek — sodda, jonli, tabiiy og'zaki nutq. Kitobiy va rasmiy iboralar YO'Q: 'muhim omilidir', 'chinakam insoniy fazilat', 'katta ahamiyat kasb etadi', 'hayotimizda yangi imkoniyatlar ochiladi' kabi hech narsa demaydigan quruq xulosalar yozma. Har jumla aniq, o'quvchi eslab qoladigan fikr bersin. Qisqa jumlalar. To'g'ri o'zbek lotin imlosi; inglizcha so'z aralashtirma (kerak bo'lsa: o'zbekcha + qavsda asli).\nANIQLIK: faqat kitobning HAQIQIY g'oyalarini yoz, muallif tushunchalarini asl ma'nosida ber. To'qima g'oya, iqtibos, raqam yozma; ishonching komil bo'lmasa — umumiy g'oya.",
     "blog_themes": [
       "«Atomic Habits» — James Clear",
       "«Boy ota, kambag'al ota» — Robert Kiyosaki",
@@ -75,7 +75,7 @@
     "footer_services": "📦 Har kuni bitta kuchli g'oya · 📚 Bilim · 🧠 Tafakkur",
     "blog_rich": true,
     "blog_no_repeat": true,
-    "blog_ending": "OXIRGI IKKI BO'LIM MAJBURIY: 🚀 **Bugun qo'llang** (nima qilish + qachon — aniq, bajarib bo'ladigan bitta qadam) va 👤 **Kimga tavsiya** (bir jumla). Ulardan keyin savol, nasihat yoki boshqa hech narsa yozma.",
+    "blog_ending": "OXIRGI QATOR MAJBURIY: 🚀 **Bugun qo'llang** — nima qilish + qachon, bitta jumlada. Undan keyin savol, nasihat yoki boshqa hech narsa yozma.",
     "llm_prefer": "claude",
     "llm_strict": true
   },
