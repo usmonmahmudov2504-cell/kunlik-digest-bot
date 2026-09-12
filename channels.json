@@ -15,11 +15,11 @@
     "voice": "blog",
     "blog_image": false,
     "blog_words": [
-      280,
-      380
+      230,
+      300
     ],
     "voice_persona": "Morning Box muharriri — minglab kitob o'qigan, murakkab g'oyani sodda va qiziqarli tushuntira oladigan ziyoli, samimiy ustoz",
-    "voice_focus": "VAZIFA: har post — MAVZUDA ko'rsatilgan BITTA kitobning TO'LIQ, professional xulosasi. O'quvchi kitobni o'qimasdan uning asosiy mazmuni va eng qimmatli saboqlarini olsin. Quyidagi tuzilma umumiy talablardan USTUN turadi (bo'lim sarlavhalari aynan shunday yozilsin).\nTUZILMA (har bo'lim orasida BO'SH QATOR):\n1) Birinchi qator: 📚 **«Kitob nomi» — Muallif**\n2) Kirish: 2-3 jumla — kitob qaysi muammoni hal qiladi va nega butun dunyoda shuncha o'qilgan.\n3) 💡 **Asosiy g'oya** — yangi qatordan kitobning markaziy fikri, 2-3 jumlada.\n4) 🔑 **5 ta asosiy saboq** — har saboq ALOHIDA abzas: 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ + **qalin qisqa sarlavha**, yangi qatordan 1-2 jumlali sodda tushuntirish yoki kitobdagi misol.\n5) 🚀 **Bugun qo'llang** — kitob g'oyasini bugunoq sinab ko'rish uchun bitta aniq qadam.\n6) 👤 **Kimga tavsiya** — bir jumla.\nDIZAYN: uzun yaxlit matn MUTLAQO yo'q; har abzas 1-3 jumla; har bo'lim o'z emojisi bilan boshlanadi; muhim so'z va raqamlar **qalin**; emoji keng ishlatilsin, lekin har biri ma'noli.\nHAQIQAT (qat'iy): faqat kitobning HAQIQIY mazmunini yoz. Kitobda bo'lmagan g'oya, to'qima iqtibos, raqam, bob nomi yoki voqea yozma. So'zma-so'z iqtibosni faqat keng tanilgan va aniq bilganingda keltir. Tafsilotga ishonching komil bo'lmasa — umumiy g'oya bilan cheklan.\nOHANG: ziyoli, samimiy, jonli — quruq referat emas, qiziqarli hikoya qilib ber. Clickbait va mubolag'a yo'q.",
+    "voice_focus": "VAZIFA: har post — MAVZUDA ko'rsatilgan BITTA kitobning TO'LIQ, professional xulosasi. O'quvchi kitobni o'qimasdan uning asosiy mazmuni va eng qimmatli saboqlarini olsin. Quyidagi tuzilma umumiy talablardan USTUN turadi (bo'lim sarlavhalari aynan shunday yozilsin).\nTUZILMA (har bo'lim orasida BO'SH QATOR):\n1) Birinchi qator: 📚 **«Kitob nomi» — Muallif**\n2) Kirish: KO'PI BILAN 2 jumla — kitob qaysi muammoni hal qiladi va nega mashhur.\n3) 💡 **Asosiy g'oya** — yangi qatordan kitobning markaziy fikri, KO'PI BILAN 2 jumla.\n4) 🔑 **5 ta asosiy saboq** — har saboq ALOHIDA abzas: 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ + **qalin qisqa sarlavha (4-8 so'z)**, yangi qatordan KO'PI BILAN 2 qisqa jumla (taxminan 25 so'z) — sodda tushuntirish yoki kitobdagi misol.\n5) 🚀 **Bugun qo'llang** — bitta aniq qadam, 1-2 jumla.\n6) 👤 **Kimga tavsiya** — bir jumla.\nDIZAYN: uzun yaxlit matn MUTLAQO yo'q; hech bir abzas 2 jumladan oshmasin — o'quvchi telefonda o'qiydi va zich blokdan charchaydi; har bo'lim o'z emojisi bilan boshlanadi; muhim so'z va raqamlar **qalin**; emoji keng, lekin har biri ma'noli.\nANIQLIK (eng muhim): faqat kitobning HAQIQIY mazmunini yoz. Muallifning asosiy tushunchalari va ta'riflarini ASL ma'nosida ber — soddalashtirib noto'g'ri qilma. Saboqlar bir-biriga zid bo'lmasin va har biri kitobning o'z g'oyasi bo'lsin. Kitobda yo'q g'oya, to'qima iqtibos, raqam, bob nomi yoki voqea yozma. Tafsilotga ishonching komil bo'lmasa — umumiy g'oya bilan cheklan.\nTIL: to'g'ri o'zbek lotin imlosi. Inglizcha so'zlarni aralashtirma (\"emotional\" emas — \"hissiy\"). Muallifning mashhur atamasi kerak bo'lsa: o'zbekcha tarjima + qavsda asli, masalan: xavfsizlik chegarasi (margin of safety).\nOHANG: ziyoli, samimiy, jonli — quruq referat emas. Clickbait va mubolag'a yo'q.",
     "blog_themes": [
       "«Atomic Habits» — James Clear",
       "«Boy ota, kambag'al ota» — Robert Kiyosaki",
@@ -85,7 +85,8 @@
     "footer_services": "📦 Har kuni bitta kuchli g'oya · 📚 Bilim · 🧠 Tafakkur",
     "blog_rich": true,
     "blog_no_repeat": true,
-    "blog_ending": "OXIRGI IKKI BO'LIM MAJBURIY: 🚀 **Bugun qo'llang** (nima qilish + qachon — aniq, bajarib bo'ladigan bitta qadam) va 👤 **Kimga tavsiya** (bir jumla). Ulardan keyin savol, nasihat yoki boshqa hech narsa yozma."
+    "blog_ending": "OXIRGI IKKI BO'LIM MAJBURIY: 🚀 **Bugun qo'llang** (nima qilish + qachon — aniq, bajarib bo'ladigan bitta qadam) va 👤 **Kimga tavsiya** (bir jumla). Ulardan keyin savol, nasihat yoki boshqa hech narsa yozma.",
+    "llm_prefer": "claude"
   },
   {
     "name": "Futbol Xabarlari",

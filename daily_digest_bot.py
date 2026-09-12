@@ -94,7 +94,7 @@ def load_channels() -> list:
 def _apply_channel(cfg: dict) -> None:
     """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
     global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES, CHANNEL_NAME
-    global SOCIAL_LINKS, POST_NOTES, POST_SIGNATURE
+    global SOCIAL_LINKS, POST_NOTES, POST_SIGNATURE, LLM_PREFER
     TELEGRAM_CHANNEL = cfg["channel"]
     TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
                                         os.environ.get("TELEGRAM_BOT_TOKEN", ""))
@@ -104,6 +104,7 @@ def _apply_channel(cfg: dict) -> None:
     SOCIAL_LINKS = cfg.get("social_links") or {}
     POST_NOTES = cfg.get("post_notes") or []
     POST_SIGNATURE = cfg.get("post_signature") or ""
+    LLM_PREFER = str(cfg.get("llm_prefer") or "").strip().lower()
 
 
 # Post ostidagi ijtimoiy tarmoq qatori uchun: kanal config'idagi social_links
@@ -115,6 +116,8 @@ POST_NOTES: list = []
 # Post ostidagi BREND imzosi (post_signature), masalan "🩺 Doctor Zafar". Bu shaxsiy
 # imzo emas, kanal muallifligi belgisi -> matn tugagach, eslatmadan oldin qo'yiladi.
 POST_SIGNATURE: str = ""
+# Kanal qaysi LLM'ni birinchi ishlatsin (llm_prefer). "claude" -> Opus 5; bo'sh -> Gemini.
+LLM_PREFER: str = ""
 # Tartib qat'iy: Telegram (kanalning o'zi) -> Instagram -> YouTube.
 _SOCIAL_ORDER = (("telegram", "✈️", "Telegram"),
                  ("instagram", "📸", "Instagram"),
@@ -593,8 +596,43 @@ def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
     return None
 
 
+# Aniqlik muhim kanallar (masalan kitob xulosasi) uchun eng kuchli model. Gemini kvotasi
+# tugaganda zaxiradagi "lite" model faktik xato va imlo xatolari bilan yozgani kuzatildi.
+CLAUDE_PREMIUM_MODEL = "claude-opus-5"
+
+
+def _claude_premium(prompt: str, max_tokens: int) -> str | None:
+    """Claude Opus 5 bilan matn. Xato yoki rad etish -> None (chaqiruvchi Gemini'ga o'tadi)."""
+    if client is None:
+        return None
+    try:
+        resp = client.beta.messages.create(
+            model=CLAUDE_PREMIUM_MODEL,
+            # Opus 5'da fikrlash (adaptive thinking) standart yoqiq va u ham shu chegaradan
+            # sarflaydi -> kichik chegara matnni o'rtasida kesib qo'yardi.
+            max_tokens=max(16000, max_tokens),
+            # Rad etilsa (juda kam) server o'zi mos zaxira modelga o'tkazadi.
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            messages=[{"role": "user", "content": prompt}])
+        if resp.stop_reason == "refusal":
+            print("Claude rad etdi:", getattr(resp.stop_details, "category", None))
+            return None
+        return "".join(b.text for b in resp.content if b.type == "text").strip() or None
+    except Exception as e:
+        print("Claude (premium) xato:", e)
+        return None
+
+
 def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
-    """Matn generatsiya: avval Gemini (bepul), keyin Claude. Ikkalasi yo'q/xato -> None."""
+    """Matn generatsiya: avval Gemini (bepul), keyin Claude. Ikkalasi yo'q/xato -> None.
+
+    Kanal config'ida llm_prefer="claude" bo'lsa -> avval Claude Opus 5 (aniqlik uchun).
+    """
+    if LLM_PREFER == "claude":
+        t = _claude_premium(prompt, max_tokens)
+        if t:
+            return t
     t = _gemini_generate(prompt, max_tokens)
     if t:
         return t
