@@ -2031,7 +2031,8 @@ def calendar_entry(now, fname="editorial_calendar.csv", slot=None):
 
 def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None,
                        theme=None, cta=None, ibora_phrase=None, ibora_gloss=None,
-                       as_photo=False, photo_queries=None, rich=False, ending=None) -> bool:
+                       as_photo=False, photo_queries=None, rich=False, ending=None,
+                       no_repeat=False) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
@@ -2049,7 +2050,11 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
         recent = st.get("recent", [])
         if not theme:                         # kalendar bermasa -> aylanma tasodifiy mavzu
             pool = themes or BLOG_THEMES
-            choices = [t for t in pool if t not in recent[-6:]] or pool
+            # no_repeat -> ro'yxat to'liq aylanib chiqmaguncha takror yo'q (kunlik kitob kabi)
+            window = recent if no_repeat else recent[-6:]
+            choices = [t for t in pool if t not in window]
+            if not choices:                   # to'liq aylana tugadi -> yangi aylana
+                choices, recent = list(pool), []
             theme = random.choice(choices)
         fmt = random.choice(BLOG_FORMATS)
         who = persona or "tajribali, samimiy bloger"
@@ -2122,7 +2127,8 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 t = t.replace("**", "").replace("__", "").replace("*", "").strip()
             return _strip_greeting(t)          # "Salom, azizlarim!" murojaatini olib tashla
 
-        text = _clean(llm_text(prompt, max_tokens=900))
+        # Uzun postlar (masalan to'liq kitob xulosasi) token chegarasida kesilmasin
+        text = _clean(llm_text(prompt, max_tokens=max(900, hi * 5)))
         if not text:
             print("Original blog: LLM javob bermadi (Gemini/Claude).")
             return False
@@ -2189,11 +2195,13 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
             except Exception as e:
                 print(f"Blog karta xato (matnga qaytamiz): {e}")
         if not posted:
-            body = (fmt_body(_trim_sentence(text, 1600)) + _post_signature()
+            # Matnli post limiti 4096 -> uzun xulosaga ham joy (footer uchun zaxira bilan)
+            body = (fmt_body(_trim_sentence(text, 3800)) + _post_signature()
                     + _post_note() + _social_footer(label))
             post_message(body, link_preview={"is_disabled": True})
         recent.append(theme)
-        st["recent"] = recent[-10:]
+        keep = len(themes or BLOG_THEMES) if no_repeat else 10
+        st["recent"] = recent[-keep:]
         _save_json("blog_state.json", st)
         print(f"Original blog \u2713 ({theme})")
         return True
@@ -2486,7 +2494,8 @@ def run_channel(now, date_label, group, cfg) -> list:
                                  as_photo=cfg.get("blog_photo", False),
                                  photo_queries=cfg.get("photo_queries"),
                                  rich=cfg.get("blog_rich", False),
-                                 ending=cfg.get("blog_ending"))
+                                 ending=cfg.get("blog_ending"),
+                                 no_repeat=cfg.get("blog_no_repeat", False))
         results.append(okO)
         if group == "AUTO" and okO:    # faqat muvaffaqiyatda slot belgilanadi -> xato -> retry
             for i in o_due:
