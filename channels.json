@@ -58,16 +58,6 @@
       "«The Subtle Art of Not Giving a F*ck» — Mark Manson",
       "«Steve Jobs» — Walter Isaacson",
       "«Shoe Dog» — Phil Knight",
-      "«O'tkan kunlar» — Abdulla Qodiriy",
-      "«Mehrobdan chayon» — Abdulla Qodiriy",
-      "«Ikki eshik orasi» — O'tkir Hoshimov",
-      "«Dunyoning ishlari» — O'tkir Hoshimov",
-      "«Alkimyogar» — Paulo Coelho",
-      "«Chol va dengiz» — Ernest Hemingway",
-      "«Jinoyat va jazo» — Fyodor Dostoyevskiy",
-      "«Kichkina shahzoda» — Antuan de Sent-Ekzyuperi",
-      "«1984» — George Orwell",
-      "«Hayvonot fermasi» — George Orwell",
       "«Antifragile» — Nassim Taleb",
       "«The Black Swan» — Nassim Taleb",
       "«Poor Charlie's Almanack» — Charlie Munger",
@@ -86,7 +76,8 @@
     "blog_rich": true,
     "blog_no_repeat": true,
     "blog_ending": "OXIRGI IKKI BO'LIM MAJBURIY: 🚀 **Bugun qo'llang** (nima qilish + qachon — aniq, bajarib bo'ladigan bitta qadam) va 👤 **Kimga tavsiya** (bir jumla). Ulardan keyin savol, nasihat yoki boshqa hech narsa yozma.",
-    "llm_prefer": "claude"
+    "llm_prefer": "claude",
+    "llm_strict": true
   },
   {
     "name": "Futbol Xabarlari",

@@ -94,7 +94,7 @@ def load_channels() -> list:
 def _apply_channel(cfg: dict) -> None:
     """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
     global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES, CHANNEL_NAME
-    global SOCIAL_LINKS, POST_NOTES, POST_SIGNATURE, LLM_PREFER
+    global SOCIAL_LINKS, POST_NOTES, POST_SIGNATURE, LLM_PREFER, LLM_STRICT
     TELEGRAM_CHANNEL = cfg["channel"]
     TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
                                         os.environ.get("TELEGRAM_BOT_TOKEN", ""))
@@ -105,6 +105,7 @@ def _apply_channel(cfg: dict) -> None:
     POST_NOTES = cfg.get("post_notes") or []
     POST_SIGNATURE = cfg.get("post_signature") or ""
     LLM_PREFER = str(cfg.get("llm_prefer") or "").strip().lower()
+    LLM_STRICT = bool(cfg.get("llm_strict"))
 
 
 # Post ostidagi ijtimoiy tarmoq qatori uchun: kanal config'idagi social_links
@@ -118,6 +119,9 @@ POST_NOTES: list = []
 POST_SIGNATURE: str = ""
 # Kanal qaysi LLM'ni birinchi ishlatsin (llm_prefer). "claude" -> Opus 5; bo'sh -> Gemini.
 LLM_PREFER: str = ""
+# llm_strict=True -> afzal model ishlamasa zaxiraga (Gemini) tushmaymiz, post o'tkazib
+# yuboriladi. Sifat miqdordan muhim kanallar uchun (zaif model to'qima mazmun yozadi).
+LLM_STRICT: bool = False
 # Tartib qat'iy: Telegram (kanalning o'zi) -> Instagram -> YouTube.
 _SOCIAL_ORDER = (("telegram", "✈️", "Telegram"),
                  ("instagram", "📸", "Instagram"),
@@ -633,6 +637,9 @@ def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
         t = _claude_premium(prompt, max_tokens)
         if t:
             return t
+        if LLM_STRICT:
+            print("Claude ishlamadi, llm_strict -> Gemini'ga o'tilmaydi, post o'tkazib yuboriladi.")
+            return None
     t = _gemini_generate(prompt, max_tokens)
     if t:
         return t
