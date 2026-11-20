@@ -546,28 +546,49 @@ def _translate_google(text: str, target: str = "uz") -> str:
         return text
 
 
-def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
-    """Gemini REST (bepul tarif). Amaldagi modellarni ketma-ket sinaydi.
+# Shu run davomida ishlamagan Gemini modellari (429 kvota / 503 band / timeout).
+# Bot har 2 daqiqada ishga tushadi va bir runda o'nlab LLM chaqiruvi bo'ladi -> kvota
+# tugagan modelni har safar qayta sinash vaqt va so'rov isrofi. Run tugaguncha o'tkazamiz.
+_GEMINI_DEAD: set = set()
+_GEMINI_OFF = False          # 400/403 (kalit xato / API yoqilmagan) -> butun run davomida o'chiq
 
-    Model 404 (o'chirilgan/noma'lum) yoki 429 (limit) -> keyingi modelga o'tadi.
-    400 (kalit xato) / 403 (API yoqilmagan) -> boshqa model yordam bermaydi, to'xtaydi.
+
+def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
+    """Gemini REST. Amaldagi modellarni ketma-ket sinaydi.
+
+    429 (kvota) / 503 (band) / timeout -> model shu run uchun o'chiriladi, keyingisiga o'tadi.
+    404 -> keyingi model. 400/403 (kalit xato / API yoqilmagan) -> Gemini butun run uchun o'chadi.
     """
+    global _GEMINI_OFF
     if not GEMINI_API_KEY:
         print("Gemini: kalit yo'q (GEMINI_API_KEY o'rnatilmagan).")
         return None
+    if _GEMINI_OFF:
+        return None
+    models = [m for m in GEMINI_MODELS if m not in _GEMINI_DEAD]
+    if not models:
+        return None                                 # hammasi shu runda ishlamadi -> so'rov yubormaymiz
     # thinkingBudget=0 -> Gemini 2.5 "o'ylash" tokenlarini o'chiramiz, aks holda ular
     # maxOutputTokens'ni yeb qo'yadi va javob yarim uzilib qoladi (matn kesik chiqadi).
     body = {"contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7,
                                  "thinkingConfig": {"thinkingBudget": 0}}}
-    for model in GEMINI_MODELS:
+    for model in models:
         try:
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                    f"{model}:generateContent?key={GEMINI_API_KEY}")
             r = requests.post(url, json=body, timeout=25)
+            if r.status_code in (429, 503):
+                _GEMINI_DEAD.add(model)
+                print(f"Gemini [{model}] {r.status_code} -> shu run davomida o'tkaziladi.")
+                continue
+            if r.status_code in (400, 403):
+                _GEMINI_OFF = True
+                print(f"Gemini [{model}] {r.status_code}: {r.text[:160]} -> Gemini shu run uchun o'chirildi.")
+                return None
             if r.status_code != 200:
                 print(f"Gemini [{model}] {r.status_code}: {r.text[:160]}")
-                continue                            # har qanday xato -> keyingi modelni sinab ko'ramiz
+                continue
             cands = (r.json().get("candidates") or [])
             if not cands:
                 print(f"Gemini [{model}]: nomzod yo'q (ehtimol xavfsizlik bloki).")
@@ -576,8 +597,13 @@ def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
             txt = "".join(p.get("text", "") for p in parts).strip()
             if txt:
                 return txt
+        except requests.Timeout:
+            _GEMINI_DEAD.add(model)
+            print(f"Gemini [{model}] timeout -> shu run davomida o'tkaziladi.")
         except Exception as e:
             print(f"Gemini [{model}] xato:", e)
+    if len(_GEMINI_DEAD) == len(GEMINI_MODELS):
+        print("Gemini: barcha modellar ishlamadi (kvota/band) -> bu run'da boshqa so'rov yuborilmaydi.")
     return None
 
 
