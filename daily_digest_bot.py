@@ -80,7 +80,7 @@ def load_channels() -> list:
     try:
         with open(p, encoding="utf-8") as f:
             data = json.load(f)
-        chans = [c for c in data if c.get("channel")]
+        chans = [c for c in data if c.get("channel") and c.get("enabled", True)]
         if chans:
             return chans
     except FileNotFoundError:
