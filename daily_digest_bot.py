@@ -9,14 +9,13 @@ Ishlash tartibi:
 4. Ma'lumotlar rangli PNG kartaga aylantiriladi (render_card.py):
    - eng arzon SOTADIGAN bank (min sotish) -> yashil
    - eng qimmat OLADIGAN bank (max olish)  -> oltin rang
-5. Claude qisqa caption (sarlavha + yangiliklar) yozadi.
+5. Gemini qisqa caption (sarlavha + yangiliklar) yozadi.
 6. Rasm + caption Telegram Bot API (sendPhoto) orqali kanalga yuboriladi.
 
 O'rnatish:
     pip install -r requirements.txt --break-system-packages
 
 Environment variable'lar:
-    ANTHROPIC_API_KEY   - Claude API kaliti
     TELEGRAM_BOT_TOKEN  - @BotFather token
     TELEGRAM_CHANNEL    - kanal username (@...) yoki chat ID (bot admin bo'lishi shart)
 """
@@ -42,11 +41,8 @@ from render_card import (
     render_goal_card, render_blog_card, render_ibora_card,
 )
 
-# API kaliti IXTIYORIY. Bo'lsa -> Claude jonli caption yozadi.
-# Bo'lmasa -> oddiy shablon ishlatiladi (bepul, hammasi baribir ishlaydi).
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 # Gemini (Google AI Studio) kaliti — IXTIYORIY, bepul tarif. Bo'lsa tarjima/caption
-# uchun BIRINCHI ishlatiladi (Claude'dan oldin). Model env orqali o'zgartiriladi.
+# uchun BIRINCHI ishlatiladi. Model env orqali o'zgartiriladi.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()   # secret'dagi bo'shliq/yangi qatorni kesamiz
 # DIQQAT: gemini-2.0-flash 2026-06-01 da o'chirilgan. Bir nechta amaldagi modelni ketma-ket
 # sinaymiz -> biri ishlamasa (404/limit) keyingisiga o'tadi. GEMINI_MODEL berilsa -> birinchi sinaladi.
@@ -94,7 +90,7 @@ def load_channels() -> list:
 def _apply_channel(cfg: dict) -> None:
     """Kanal kontekstini global'larga o'rnatadi (token, kanal, state kaliti, footer)."""
     global TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL, CHANNEL_KEY, FOOTER_SERVICES, CHANNEL_NAME
-    global SOCIAL_LINKS, POST_NOTES, POST_SIGNATURE, LLM_PREFER, LLM_STRICT
+    global SOCIAL_LINKS, POST_NOTES, POST_SIGNATURE
     TELEGRAM_CHANNEL = cfg["channel"]
     TELEGRAM_BOT_TOKEN = os.environ.get(cfg.get("token_env", "TELEGRAM_BOT_TOKEN"),
                                         os.environ.get("TELEGRAM_BOT_TOKEN", ""))
@@ -104,8 +100,6 @@ def _apply_channel(cfg: dict) -> None:
     SOCIAL_LINKS = cfg.get("social_links") or {}
     POST_NOTES = cfg.get("post_notes") or []
     POST_SIGNATURE = cfg.get("post_signature") or ""
-    LLM_PREFER = str(cfg.get("llm_prefer") or "").strip().lower()
-    LLM_STRICT = bool(cfg.get("llm_strict"))
 
 
 # Post ostidagi ijtimoiy tarmoq qatori uchun: kanal config'idagi social_links
@@ -117,11 +111,6 @@ POST_NOTES: list = []
 # Post ostidagi BREND imzosi (post_signature), masalan "🩺 Doctor Zafar". Bu shaxsiy
 # imzo emas, kanal muallifligi belgisi -> matn tugagach, eslatmadan oldin qo'yiladi.
 POST_SIGNATURE: str = ""
-# Kanal qaysi LLM'ni birinchi ishlatsin (llm_prefer). "claude" -> Opus 5; bo'sh -> Gemini.
-LLM_PREFER: str = ""
-# llm_strict=True -> afzal model ishlamasa zaxiraga (Gemini) tushmaymiz, post o'tkazib
-# yuboriladi. Sifat miqdordan muhim kanallar uchun (zaif model to'qima mazmun yozadi).
-LLM_STRICT: bool = False
 # Tartib qat'iy: Telegram (kanalning o'zi) -> Instagram -> YouTube.
 _SOCIAL_ORDER = (("telegram", "✈️", "Telegram"),
                  ("instagram", "📸", "Instagram"),
@@ -195,14 +184,6 @@ UA = {"User-Agent": "Mozilla/5.0 (digest-bot)"}
 # Maqola sahifalaridan rasm (og:image) olishda haqiqiy brauzer UA ishonchliroq.
 UA_WEB = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"}
-
-client = None
-if ANTHROPIC_API_KEY:
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    except Exception as e:
-        print("anthropic ulanmadi, shablonga o'tildi:", e)
 
 # ------------------------------------------------------------------ OB-HAVO
 # 14 viloyat markazlari (lat, lon). Tartib rasmda ham shu tartibda chiqadi.
@@ -548,7 +529,7 @@ def get_business_news(limit: int = 5) -> list[dict]:
 def _translate_google(text: str, target: str = "uz") -> str:
     """Bepul, kalitsiz Google Translate endpoint. Xato bo'lsa -> original matn.
 
-    ANTHROPIC_API_KEY bo'lmasa ham (yoki Claude xato bersa) rus/boshqa til
+    Gemini bo'lmasa ham (yoki xato bersa) rus/boshqa til
     o'zbekchaga o'giriladi -> kanal hech qachon ruscha chiqib qolmaydi."""
     if not text:
         return text
@@ -600,58 +581,9 @@ def _gemini_generate(prompt: str, max_tokens: int = 400) -> str | None:
     return None
 
 
-# Aniqlik muhim kanallar (masalan kitob xulosasi) uchun eng kuchli model. Gemini kvotasi
-# tugaganda zaxiradagi "lite" model faktik xato va imlo xatolari bilan yozgani kuzatildi.
-CLAUDE_PREMIUM_MODEL = "claude-opus-5"
-
-
-def _claude_premium(prompt: str, max_tokens: int) -> str | None:
-    """Claude Opus 5 bilan matn. Xato yoki rad etish -> None (chaqiruvchi Gemini'ga o'tadi)."""
-    if client is None:
-        return None
-    try:
-        resp = client.beta.messages.create(
-            model=CLAUDE_PREMIUM_MODEL,
-            # Opus 5'da fikrlash (adaptive thinking) standart yoqiq va u ham shu chegaradan
-            # sarflaydi -> kichik chegara matnni o'rtasida kesib qo'yardi.
-            max_tokens=max(16000, max_tokens),
-            # Rad etilsa (juda kam) server o'zi mos zaxira modelga o'tkazadi.
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            messages=[{"role": "user", "content": prompt}])
-        if resp.stop_reason == "refusal":
-            print("Claude rad etdi:", getattr(resp.stop_details, "category", None))
-            return None
-        return "".join(b.text for b in resp.content if b.type == "text").strip() or None
-    except Exception as e:
-        print("Claude (premium) xato:", e)
-        return None
-
-
 def llm_text(prompt: str, max_tokens: int = 600) -> str | None:
-    """Matn generatsiya: avval Gemini (bepul), keyin Claude. Ikkalasi yo'q/xato -> None.
-
-    Kanal config'ida llm_prefer="claude" bo'lsa -> avval Claude Opus 5 (aniqlik uchun).
-    """
-    if LLM_PREFER == "claude":
-        t = _claude_premium(prompt, max_tokens)
-        if t:
-            return t
-        if LLM_STRICT:
-            print("Claude ishlamadi, llm_strict -> Gemini'ga o'tilmaydi, post o'tkazib yuboriladi.")
-            return None
-    t = _gemini_generate(prompt, max_tokens)
-    if t:
-        return t
-    if client is not None:
-        try:
-            resp = client.messages.create(
-                model="claude-sonnet-4-6", max_tokens=max_tokens,
-                messages=[{"role": "user", "content": prompt}])
-            return "".join(b.text for b in resp.content if b.type == "text").strip() or None
-        except Exception as e:
-            print("Claude xato:", e)
-    return None
+    """Matn generatsiya: Gemini. Kalit yo'q/xato -> None."""
+    return _gemini_generate(prompt, max_tokens)
 
 
 # Blog matni boshidagi "Salom, azizlarim! 👋" kabi murojaatni ushlaydigan naqsh.
@@ -796,14 +728,14 @@ def _article_text(link: str, max_paras: int = 12, max_chars: int = 3500) -> str:
 def translate_to_uz(text: str) -> str:
     """Sarlavhani tabiiy O'zbek (lotin) tiliga tarjima qiladi.
 
-    Tartib: Gemini -> Claude -> bepul Google Translate. Hammasi yiqilsa original qoladi.
+    Tartib: Gemini -> bepul Google Translate. Hammasi yiqilsa original qoladi.
     Shu sabab kanal hech qachon ruscha/tarjimasiz chiqib qolmaydi."""
     if not text:
         return text
     prompt = ("Quyidagi sport/futbol yangiligi sarlavhasini tabiiy, jonli O'zbek "
               "tiliga (lotin alifbosida) tarjima qil. Faqat tarjimani qaytar, "
               f"izoh va qo'shtirnoqsiz:\n\n{text}")
-    t = llm_text(prompt, 200)        # Gemini -> Claude
+    t = llm_text(prompt, 200)        # Gemini
     if t:
         t = t.strip().strip('"«»').strip()
         if t:
@@ -814,7 +746,7 @@ def translate_to_uz(text: str) -> str:
 def translate_paras_uz(paras: list[str]) -> list[str]:
     """Paragraflar ro'yxatini o'zbekchaga tarjima qiladi (Instant View ichi uchun).
 
-    Avval LLM (Gemini -> Claude) butun matnni BITTA chaqiruvda tarjima qiladi
+    Avval LLM (Gemini) butun matnni BITTA chaqiruvda tarjima qiladi
     (paragraf tuzilishini saqlaydi); bo'lmasa har paragraf bepul Google bilan."""
     paras = [p for p in paras if p and p.strip()]
     if not paras:
@@ -1546,7 +1478,7 @@ def weather_caption(date_label, weather) -> str:
 
 
 def day_caption(date_label, info) -> str:
-    """1-post: Bugun qanaqa kun (A: hisoblangan + bayramlar; B: Claude boyitadi)."""
+    """1-post: Bugun qanaqa kun (A: hisoblangan + bayramlar; B: Gemini boyitadi)."""
     parts = [f"\U0001F4C5 <b>Bugun</b> \u2014 {date_label}", ""]
     parts.append(f"\U0001F5D3 Hafta kuni: <b>{info['weekday']}</b>")
     parts.append(f"\U0001F343 Fasl: <b>{info['season']}</b>")
@@ -1560,7 +1492,7 @@ def day_caption(date_label, info) -> str:
     parts.append("Xayrli kun tilaymiz!")
     text = "\n".join(parts)
 
-    # Kalit (Gemini yoki Claude) bo'lsa caption boyitiladi; bo'lmasa shablon qoladi.
+    # Gemini kaliti bo'lsa caption boyitiladi; bo'lmasa shablon qoladi.
     hol = ", ".join(info["holidays"]) or "maxsus bayram yo'q"
     prompt = (
         f"Bugun {date_label}, {info['weekday']}, {info['season']} fasli. "
@@ -1569,7 +1501,7 @@ def day_caption(date_label, info) -> str:
         "Tuzilishi: emoji bilan sarlavha; sana/fasl; agar bayram bo'lsa u haqida 1 jumla "
         "qiziqarli fakt; oxirida xayrli kun tilagi. Faqat matnni qaytar."
     )
-    enriched = llm_text(prompt, 600)       # Gemini -> Claude
+    enriched = llm_text(prompt, 600)       # Gemini
     if enriched:
         text = enriched
     text += "\n\n" + _tags("day")
@@ -2088,7 +2020,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
     to'g'ri chizilgan) kartaga tushadi; LLM matni esa Telegram CAPTION sifatida yuboriladi
     (caption Telegram'ning o'z shrifti bilan chiziladi -> arabcha to'g'ri ko'rinadi, Pillow
     kartada emas).
-    LLM (Gemini->Claude) bo'lmasa -> post yo'q (False), bot davom etadi.
+    LLM (Gemini) bo'lmasa -> post yo'q (False), bot davom etadi.
     """
     try:
         st = _load_json("blog_state.json", {})
@@ -2175,7 +2107,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
         # Uzun postlar (masalan to'liq kitob xulosasi) token chegarasida kesilmasin
         text = _clean(llm_text(prompt, max_tokens=max(900, hi * 5)))
         if not text:
-            print("Original blog: LLM javob bermadi (Gemini/Claude).")
+            print("Original blog: LLM javob bermadi (Gemini).")
             return False
         # Model chegarani so'z bilan aytilganda ham oshirib yuboradi. Kesish esa postning
         # OXIRINI (amaliy qadamni) yo'q qiladi -> shuning uchun bir marta QAYTA so'raymiz:
@@ -2723,7 +2655,7 @@ def main() -> None:
     # uchun bu yerda SINOV chaqirig'i YO'Q -> haqiqiy xatolar baribir blogify/blog log'ida chiqadi.
     if os.environ.get("FORCE_POST"):
         print(f"LLM kalitlari: GEMINI={'bor' if GEMINI_API_KEY else 'yoq'} "
-              f"(modellar: {', '.join(GEMINI_MODELS)}) | ANTHROPIC={'bor' if client else 'yoq'}")
+              f"(modellar: {', '.join(GEMINI_MODELS)})")
 
     # Darvoza: faol oynadan tashqarida (tunda) -> hech kanalga post yo'q. Xato emas (exit 0).
     if not within_window(group, now):
@@ -2750,7 +2682,7 @@ def main() -> None:
     fail = len(results) - ok
     print(f"\nGuruh: {group} | {ok} post ✓ · {fail} xato ({len(results)} urinish).")
     # MUHIM: workflow'ni HECH QACHON QIZIL qilmaymiz (exit 0). Ba'zi postlar (blog/AI)
-    # LLM (Gemini kvota / Claude kredit) tugagani uchun yiqilishi mumkin -> rasm-postlar
+    # LLM (Gemini kvota) tugagani uchun yiqilishi mumkin -> rasm-postlar
     # baribir chiqaveradi va har run'da "Run failed" email kelmasin. Xatolar log'da ko'rinadi.
     if fail:
         print("Eslatma: ba'zi postlar chiqmadi (odatda LLM tugagani sababli). Log'ni ko'ring.")

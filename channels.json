@@ -75,9 +75,7 @@
     "footer_services": "📦 Har kuni bitta kuchli g'oya · 📚 Bilim · 🧠 Tafakkur",
     "blog_rich": true,
     "blog_no_repeat": true,
-    "blog_ending": "OXIRGI QATOR MAJBURIY: 🚀 **Bugun qo'llang** — nima qilish + qachon, bitta jumlada. Undan keyin savol, nasihat yoki boshqa hech narsa yozma.",
-    "llm_prefer": "claude",
-    "llm_strict": true
+    "blog_ending": "OXIRGI QATOR MAJBURIY: 🚀 **Bugun qo'llang** — nima qilish + qachon, bitta jumlada. Undan keyin savol, nasihat yoki boshqa hech narsa yozma."
   },
   {
     "name": "Futbol Xabarlari",

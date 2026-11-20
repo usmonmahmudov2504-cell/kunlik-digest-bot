@@ -13,7 +13,6 @@ Ishga tushirish:
 Muhit o'zgaruvchilari:
   TELEGRAM_BOT_TOKEN   — bot tokeni (@BotFather dan)
   GEMINI_API_KEY       — Gemini (bepul, birinchi urinadi)
-  ANTHROPIC_API_KEY    — Claude (zaxira)
 """
 
 from __future__ import annotations
@@ -131,33 +130,10 @@ def _gemini(system: str, history: list[tuple[str, str]], user_text: str) -> str 
     return None
 
 
-def _claude(system: str, history: list[tuple[str, str]], user_text: str) -> str | None:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return None
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        msgs = [{"role": r, "content": t} for r, t in history]
-        msgs.append({"role": "user", "content": user_text})
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            system=system,
-            messages=msgs,
-        )
-        return "".join(b.text for b in resp.content if b.type == "text").strip() or None
-    except Exception as e:
-        print("Claude xato:", e)
-        return None
-
-
 def generate_reply(cfg: dict, history: list[tuple[str, str]], user_text: str) -> str:
-    """Gemini → Claude → standart xabar."""
+    """Gemini → standart xabar."""
     system = _build_system(cfg)
     reply = _gemini(system, history, user_text)
-    if not reply:
-        reply = _claude(system, history, user_text)
     if not reply:
         reply = "Savolingiz uchun rahmat! Hozir javob bera olmayapman, biroz kutib qayta yozing."
     return reply
