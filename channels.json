@@ -181,7 +181,7 @@
   },
   {
     "name": "Zamonaviy Arabcha",
-    "channel": "@zamonaviy_arabcha",
+    "channel": "@zamonaviy_arab",
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["O"],
     "slots": {"O": [8.0, 19.5]},
