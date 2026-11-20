@@ -105,6 +105,7 @@
   {
     "name": "StartupNews | Amiriddinova",
     "channel": "@Startupnews_Amiriddinova",
+    "news_words": [60, 110],
     "token_env": "TELEGRAM_BOT_TOKEN",
     "groups": ["C", "P", "O"],
     "slots": {"O": [11.5, 19.5]},

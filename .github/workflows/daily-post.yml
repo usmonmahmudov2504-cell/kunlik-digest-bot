@@ -23,9 +23,9 @@ jobs:
       group: digest-post       # ishlar bir-birining ustiga chiqmasin (holat to'qnashuvi yo'q)
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip                 # tez-tez ishga tushishda pip'ni tezlashtiradi (gol-kuzatuvchi)
