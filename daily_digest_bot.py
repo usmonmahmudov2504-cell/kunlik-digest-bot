@@ -213,7 +213,7 @@ WEATHER_CODES = {
 }
 
 
-def get_all_weather() -> dict[str, tuple]:
+def get_all_weather(day: int = 0) -> dict[str, tuple]:
     """14 viloyat uchun BUGUNGI kunning (eng yuqori harorat, holat)ini oladi.
 
     MUHIM: 'current' (aynan shu daqiqadagi harorat) EMAS -> kunlik forecast (max harorat)
@@ -226,7 +226,7 @@ def get_all_weather() -> dict[str, tuple]:
     url = (
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lats}&longitude={lons}"
-        "&daily=temperature_2m_max,weather_code&timezone=Asia/Tashkent&forecast_days=1"
+        f"&daily=temperature_2m_max,weather_code&timezone=Asia/Tashkent&forecast_days={day + 1}"
     )
     data = requests.get(url, headers=UA, timeout=20).json()
     # Bir nechta koordinata -> javob ro'yxat bo'lib qaytadi
@@ -235,8 +235,8 @@ def get_all_weather() -> dict[str, tuple]:
     out: dict[str, tuple] = {}
     for region, item in zip(REGIONS, data):
         daily = item["daily"]
-        desc = WEATHER_CODES.get(daily["weather_code"][0], "ochiq")
-        out[region] = (daily["temperature_2m_max"][0], desc)
+        desc = WEATHER_CODES.get(daily["weather_code"][day], "ochiq")
+        out[region] = (daily["temperature_2m_max"][day], desc)
     return out
 
 
@@ -2326,12 +2326,213 @@ def due_multi(group: str, now, daily_state: dict, slots,
     return out
 
 
+# ------------------------------------------------------------------ X: DOLLAR KANALI (namuna tartibi)
+# Kunlik tartib (Toshkent vaqti) -- namuna dollar kanali bilan bir xil:
+#   08:15  Бозор курси (matn)                          -> X0
+#   11:15  📍 Вилоятлардаги бугунги доллар курси!      -> X1
+#   16:15  🏦 Тижорат банклардаги доллар курси! (rasm)  -> X2
+#   17:00+ Доллар курси кўтарилди/тушди (CBU ertangi kursi chiqqach, rasm) -> X3
+#   21:00  🌤 ЭРТАНГИ ДОЛЛАР ВА ОБ-ҲАВО (rasm)         -> X4
+#   kun davomida: ⚡️ Вилоятларда доллар курси ўзгарди! (bank kursi o'zgarsa)
+X_SLOTS = {0: 8.25, 1: 11.25, 2: 16.25, 3: 17.0, 4: 21.0}
+X_WINDOW = 2.0                    # slotdan keyin shu soatgacha ushlaydi (heartbeat kechiksa)
+X_CHANGE_HOURS = (9.0, 20.0)      # "kurs o'zgardi" xabarlari faqat shu oraliqda
+X_CHANGE_GAP_MIN = 60             # ketma-ket o'zgarish xabarlari orasida kamida (daqiqa)
+X_REGIONS = ["Тошкент", "Жиззах", "Самарқанд", "Бухоро", "Қўқон",
+             "Наманган", "Фарғона", "Марғилон", "Андижон"]
+X_MONTHS = ["", "январь", "февраль", "март", "апрель", "май", "июнь",
+            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"]
+
+
+def _x_footer() -> str:
+    uname = str(TELEGRAM_CHANNEL).lstrip("@")
+    return ("\n\n💱 <b>Валюта курслари бўйича энг сўнги янгиликлар👇</b>\n"
+            f"https://t.me/{uname}")
+
+
+def _x_text(lines) -> str:
+    return "\n".join(lines) + _x_footer()
+
+
+def _x_market(banks):
+    """Banklar median kursi: (biz sotamiz = bank oladi, biz olamiz = bank sotadi)."""
+    valid = [b for b in banks if b.get("buy") and b.get("sell")]
+    if not valid:
+        return None
+    buys = sorted(b["buy"] for b in valid)
+    sells = sorted(b["sell"] for b in valid)
+    return buys[len(buys) // 2], sells[len(sells) // 2]
+
+
+def _x_num(v) -> str:
+    return f"{v:,.2f}".replace(",", " ").replace(".", ",")
+
+
+def x_market_caption(mk, by, now) -> str:
+    lines = ["<b>Бозор курси</b>"]
+    if mk:
+        lines += ["🇺🇸 Доллар:", f"🔼 Сотиш: {mk[0]} сўм", f"🔽 Олиш: {mk[1]} сўм", ""]
+    lines.append("<b>Расмий курс:</b>")
+    for code, flag, name in (("USD", "🇺🇸", "доллар"), ("RUB", "🇷🇺", "рубл"), ("EUR", "🇪🇺", "евро")):
+        if code in by:
+            lines.append(f"{flag} 1 {name} = <b>{float(by[code]['Rate']):.2f}</b> сўм")
+    lines.append("")
+    for code, flag, name in (("KGS", "🇰🇬", "сом"), ("TRY", "🇹🇷", "лийра"), ("KZT", "🇰🇿", "тенге")):
+        if code in by:
+            lines.append(f"{flag} 1 {name} = <b>{float(by[code]['Rate']):.2f}</b> сўм")
+    lines += ['<a href="https://cbu.uz">Марказий Банк</a>', "",
+              f"♻️ Янгиланди: {now.strftime('%H:%M')}"]
+    return _x_text(lines)
+
+
+def x_regions_caption(mk, now, changed=False) -> str:
+    head = ("⚡️ Вилоятларда доллар курси ўзгарди!" if changed
+            else "📍 Вилоятлардаги бугунги доллар курси!")
+    lines = [f"<b>{head}</b>", ""]
+    for i, r in enumerate(X_REGIONS):
+        lines += [f"├{'🔹' if i % 2 == 0 else '🔸'} <b>{r}</b>", f"├ {mk[0]} / {mk[1]}"]
+    lines += ["", f"♻️ {now.strftime('%H:%M')}"]
+    return _x_text(lines)
+
+
+def _cbu_usd_on(date):
+    """CBU'ning shu sanaga amal qiladigan USD kursi. Hali e'lon qilinmagan bo'lsa -> None."""
+    url = f"https://cbu.uz/uz/arkhiv-kursov-valyut/json/USD/{date.isoformat()}/"
+    it = requests.get(url, headers=UA, timeout=15).json()[0]
+    if it.get("Date") != date.strftime("%d.%m.%Y"):
+        return None                 # CBU eski kursni qaytardi -> ertangi kurs hali yo'q
+    return float(it["Rate"]), float(it.get("Diff") or 0)
+
+
+def run_dollar_mirror(now, date_label, group, cfg) -> list:
+    """Dollar kanali: namuna kanal kunlik tartibi (X_SLOTS) + kurs o'zgarish xabarlari."""
+    ch = str(TELEGRAM_CHANNEL)
+    today = now.strftime("%Y-%m-%d")
+    cur = now.hour + now.minute / 60.0
+    st = load_daily()
+    forced = bool(os.environ.get("FORCE_POST")) and group != "AUTO"
+    due = [i for i, h in X_SLOTS.items()
+           if st.get(f"X{i}") != today and (forced or h <= cur <= h + X_WINDOW)]
+    if forced:
+        due = due[:1]               # qo'lda test: faqat navbatdagi bitta post
+    print(f"  [{ch}] {now.strftime('%H:%M')} -> X{due}")
+    results, changed = [], False
+    tomorrow = (now + datetime.timedelta(days=1)).date()
+    tlabel = f"{tomorrow.day} {X_MONTHS[tomorrow.month]}"
+
+    cache = {}
+
+    def banks_mk():
+        if "banks" not in cache:
+            cache["banks"] = get_bank_rates()
+            cache["mk"] = _x_market(cache["banks"])
+        return cache["banks"], cache["mk"]
+
+    def done(i):
+        st[f"X{i}"] = today
+        results.append(True)
+        print(f"X{i} ✓")
+
+    for i in due:
+        try:
+            if i == 0:
+                by = {it.get("Ccy"): it for it in requests.get(
+                    "https://cbu.uz/uz/arkhiv-kursov-valyut/json/", headers=UA, timeout=15).json()}
+                _, m = banks_mk()
+                post_message(x_market_caption(m, by, now), link_preview={"is_disabled": True})
+                if m:
+                    st["Xlast"] = list(m)
+                done(i)
+            elif i == 1:
+                _, m = banks_mk()
+                if not m:
+                    print("X1: bank kursi topilmadi.")
+                    results.append(False)
+                    continue
+                post_message(x_regions_caption(m, now), link_preview={"is_disabled": True})
+                st["Xlast"], st["Xlast_ts"] = list(m), now.timestamp()
+                done(i)
+            elif i == 2:
+                banks, _ = banks_mk()
+                if not banks:
+                    print("X2: bank kursi topilmadi.")
+                    results.append(False)
+                    continue
+                cbu_text, overview, _ = get_cbu_rates()
+                usd = next((r["value"] for r in overview if r["code"] == "USD"), None)
+                img = render_currency_card(date_label, cbu_text, banks, "p6.png", ch, usd_value=usd)
+                post_photo(img, _x_text(["🏦 <b>Тижорат банклардаги доллар курси!</b>", "",
+                                         f"• Янгиланган вақт: {now.strftime('%H:%M')}"]))
+                done(i)
+            elif i == 3:
+                r = _cbu_usd_on(tomorrow)
+                if not r:
+                    print("X3: CBU ertangi kursni hali e'lon qilmagan.")
+                    continue
+                rate, diff = r
+                word = "кўтарилди" if diff > 0 else ("тушди" if diff < 0 else "ўзгармади")
+                _, overview, _ = get_cbu_rates()
+                img = render_currency_overview_card(date_label, overview, "p5.png", ch,
+                                                    load_prev_rates())
+                sign = "+" if diff >= 0 else "-"
+                post_photo(img, _x_text([
+                    f"<b>Доллар курси {word}</b>", "",
+                    f"{tlabel} куни амал қиладиган АҚШ долларининг расмий курси "
+                    "қуйидагича ҳисобланади:", "",
+                    f"<b>{_x_num(rate)} сўм ({sign}{_x_num(abs(diff))} сўм)</b>"]))
+                st["Xtomorrow"] = rate
+                done(i)
+            elif i == 4:
+                weather = get_all_weather(day=1)
+                img = render_weather_card(f"{tomorrow.day}-{UZ_MONTHS[tomorrow.month]}", weather,
+                                          "p4.png", ch)
+                lines = ["🌤 <b>ЭРТАНГИ ДОЛЛАР ВА ОБ-ҲАВО МАЪЛУМОТЛАРИ</b>"]
+                r = None
+                try:
+                    r = _cbu_usd_on(tomorrow)
+                except Exception:
+                    pass
+                if r:
+                    lines += ["", f"🇺🇸 {tlabel}: 1 доллар = <b>{_x_num(r[0])} сўм</b>"]
+                post_photo(img, _x_text(lines))
+                done(i)
+            changed = True
+        except Exception as e:
+            print(f"X{i} XATO: {e}")
+            results.append(False)
+
+    # Kun davomida bank kursi o'zgarsa -> "⚡️ Вилоятларда доллар курси ўзгарди!"
+    gap_ok = (now.timestamp() - float(st.get("Xlast_ts") or 0)) / 60.0 >= X_CHANGE_GAP_MIN
+    if (group == "AUTO" and st.get("X1") == today and gap_ok and not due
+            and X_CHANGE_HOURS[0] <= cur <= X_CHANGE_HOURS[1]):
+        _, m = banks_mk()
+        if m and list(m) != list(st.get("Xlast") or []):
+            try:
+                post_message(x_regions_caption(m, now, changed=True),
+                             link_preview={"is_disabled": True})
+                print("Kurs o'zgardi ✓")
+                st["Xlast"], st["Xlast_ts"] = list(m), now.timestamp()
+                changed = True
+                results.append(True)
+            except Exception as e:
+                print("Kurs o'zgardi XATO:", e)
+                results.append(False)
+
+    if changed:
+        save_daily(st)
+    return results
+
+
 def run_channel(now, date_label, group, cfg) -> list:
     """Bitta kanal uchun postlarni bajaradi (kontekst _apply_channel orqali o'rnatilgan).
 
     cfg["groups"] -> shu kanal qaysi turdagi postlarni oladi (A/B/C/D/M)."""
     ch = str(TELEGRAM_CHANNEL)
     groups_on = set(cfg.get("groups", ["A", "B", "C", "D", "M"]))
+    if "X" in groups_on:              # dollar kanali -> o'z tartibi (run_dollar_mirror)
+        if group in ("AUTO", "ALL", "X"):
+            return run_dollar_mirror(now, date_label, group, cfg)
+        return []
     slots_cfg = cfg.get("slots", {})        # har-kanal jadval: {"D":[...], "M":[...]}
     text_only = cfg.get("text_only", False)  # premium TEXT design -> rasm-kartasiz matn postlari
     today = now.strftime("%Y-%m-%d")

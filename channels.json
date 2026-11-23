@@ -95,10 +95,7 @@
     "name": "Dollar Kursi | Bugun",
     "channel": "@DollarKursis",
     "token_env": "TELEGRAM_BOT_TOKEN",
-    "groups": ["D", "M", "B"],
-    "slots": {"D": [9.0], "M": [11.0]},
-    "text_only": true,
-    "footer_services": "💵 Har kun dollar, valyuta va bozor"
+    "groups": ["X"]
   },
   {
     "name": "StartupNews | Amiriddinova",
