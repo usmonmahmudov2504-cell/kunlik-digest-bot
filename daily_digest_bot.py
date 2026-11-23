@@ -2035,7 +2035,7 @@ def calendar_entry(now, fname="editorial_calendar.csv", slot=None):
 def post_original_blog(focus=None, themes=None, persona=None, as_image=False, words=None,
                        theme=None, cta=None, ibora_phrase=None, ibora_gloss=None,
                        as_photo=False, photo_queries=None, rich=False, ending=None,
-                       no_repeat=False) -> bool:
+                       no_repeat=False, state_name="blog_state.json", heading=None) -> bool:
     """Yangilikka bog'lanmagan ORIGINAL blog-post (biznes, motivatsiya, refleksiya...).
 
     persona -> yozuvchining ovozi/identifikatsiyasi (masalan "kitobsevar ziyoli bloger").
@@ -2049,7 +2049,7 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
     LLM (Gemini) bo'lmasa -> post yo'q (False), bot davom etadi.
     """
     try:
-        st = _load_json("blog_state.json", {})
+        st = _load_json(state_name, {})
         recent = st.get("recent", [])
         if not theme:                         # kalendar bermasa -> aylanma tasodifiy mavzu
             pool = themes or BLOG_THEMES
@@ -2199,13 +2199,14 @@ def post_original_blog(focus=None, themes=None, persona=None, as_image=False, wo
                 print(f"Blog karta xato (matnga qaytamiz): {e}")
         if not posted:
             # Matnli post limiti 4096 -> uzun xulosaga ham joy (footer uchun zaxira bilan)
-            body = (fmt_body(_trim_sentence(text, 3800)) + _post_signature()
+            head = f"{heading}\n\n" if heading else ""
+            body = (head + fmt_body(_trim_sentence(text, 3800)) + _post_signature()
                     + _post_note() + _social_footer(label))
             post_message(body, link_preview={"is_disabled": True})
         recent.append(theme)
         keep = len(themes or BLOG_THEMES) if no_repeat else 10
         st["recent"] = recent[-keep:]
-        _save_json("blog_state.json", st)
+        _save_json(state_name, st)
         print(f"Original blog \u2713 ({theme})")
         return True
     except Exception as e:
@@ -2324,6 +2325,73 @@ def due_multi(group: str, now, daily_state: dict, slots,
         if slot + _jitter_h(now, f"{group}{i}|{CHANNEL_KEY}", jitter_min) <= cur <= slot + window:
             out.append(i)
     return out
+
+
+# ------------------------------------------------------------------ K: KUTUBXONA (ruknlar)
+# Kanal config'idagi "rubrics" ro'yxati: har rukn o'z vaqtida kuniga bir marta chiqadi.
+#   {"slot": 7.5, "type": "blog", "heading": "...", "themes": [...], "focus": "...", ...}
+#   {"slot": 20.5, "type": "quote", "file": "quotes_morningbox.json", "heading": "..."}
+# "quote" rukni AI'siz: tayyor, manbasi tekshirilgan iqtiboslar -> kvota tugasa ham chiqadi.
+K_WINDOW = 2.5
+
+
+def post_quote(rub) -> bool:
+    items = json.load(open(os.path.join(HERE, rub["file"]), encoding="utf-8"))
+    sname = rub.get("state", "quote_state.json")
+    st = _load_json(sname, {})
+    used = st.get("used", [])
+    choices = [i for i in range(len(items)) if i not in used]
+    if not choices:
+        choices, used = list(range(len(items))), []
+    i = random.choice(choices)
+    it = items[i]
+    e = lambda t: html.escape(t, quote=False)
+    src = f", <i>{e(it['src'])}</i>" if it.get("src") else ""
+    parts = [rub.get("heading", "💡 <b>Kun fikri</b>"), "",
+             f"<b>«{e(it['q'])}»</b>", "", f"— {e(it['a'])}{src}", "",
+             f"🧠 {e(it['why'])}"]
+    if it.get("do"):
+        parts += ["", f"🚀 <b>Bugun qo'llang:</b> {e(it['do'])}"]
+    label = CHANNEL_NAME or str(TELEGRAM_CHANNEL)
+    post_message("\n".join(parts) + _social_footer(label), link_preview={"is_disabled": True})
+    used.append(i)
+    st["used"] = used
+    _save_json(sname, st)
+    print(f"Kun fikri ✓ ({it['a']})")
+    return True
+
+
+def run_rubrics(now, group, cfg) -> list:
+    today = now.strftime("%Y-%m-%d")
+    cur = now.hour + now.minute / 60.0
+    st = load_daily()
+    rubs = cfg.get("rubrics", [])
+    forced = bool(os.environ.get("FORCE_POST")) and group != "AUTO"
+    due = [i for i, r in enumerate(rubs) if st.get(f"K{i}") != today
+           and (forced or r["slot"] <= cur <= r["slot"] + K_WINDOW)]
+    if forced:
+        due = due[:1]
+    print(f"  [{TELEGRAM_CHANNEL}] {now.strftime('%H:%M')} -> K{due}")
+    results = []
+    for i in due:
+        r = rubs[i]
+        if r.get("type") == "quote":
+            try:
+                ok = post_quote(r)
+            except Exception as ex:
+                print("Kun fikri XATO:", ex)
+                ok = False
+        else:
+            ok = post_original_blog(focus=r.get("focus"), themes=r.get("themes"),
+                                    persona=cfg.get("voice_persona"), words=r.get("words"),
+                                    rich=True, ending=r.get("ending"), no_repeat=True,
+                                    state_name=r.get("state", f"rubric{i}.json"),
+                                    heading=r.get("heading"))
+        results.append(ok)
+        if ok:
+            st[f"K{i}"] = today
+            save_daily(st)
+    return results
 
 
 # ------------------------------------------------------------------ X: DOLLAR KANALI (namuna tartibi)
@@ -2529,6 +2597,8 @@ def run_channel(now, date_label, group, cfg) -> list:
     cfg["groups"] -> shu kanal qaysi turdagi postlarni oladi (A/B/C/D/M)."""
     ch = str(TELEGRAM_CHANNEL)
     groups_on = set(cfg.get("groups", ["A", "B", "C", "D", "M"]))
+    if "K" in groups_on:              # kutubxona -> ruknlar (run_rubrics)
+        return run_rubrics(now, group, cfg) if group in ("AUTO", "ALL", "K") else []
     if "X" in groups_on:              # dollar kanali -> o'z tartibi (run_dollar_mirror)
         if group in ("AUTO", "ALL", "X"):
             return run_dollar_mirror(now, date_label, group, cfg)
